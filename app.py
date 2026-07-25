@@ -76,8 +76,9 @@ warnings.filterwarnings('ignore')
 #  KONFIGURASI APLIKASI
 # ══════════════════════════════════════════════════════════════════
 NAMA_INSTANSI  = "Pemerintah Kota / Kabupaten"   # ← ubah sesuai instansi
-MODEL_DIR      = "models"
-UPLOAD_FOLDER  = "uploads"
+is_vercel = bool(os.environ.get("VERCEL") or os.environ.get("VERCEL_ENV"))
+MODEL_DIR      = "/tmp/models" if is_vercel else "models"
+UPLOAD_FOLDER  = "/tmp/uploads" if is_vercel else "uploads"
 ALLOWED_EXT    = {"xlsx", "xls", "csv"}
 EDA_CACHE_PKL  = os.path.join(MODEL_DIR, "eda_summary.pkl")
 EDA_CACHE_JSON = os.path.join(MODEL_DIR, "eda_summary.json")
