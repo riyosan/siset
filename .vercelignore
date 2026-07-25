@@ -1,0 +1,11 @@
+uploads/*
+!uploads/.gitkeep
+models/*.png
+models/*.xlsx
+models/*.pkl
+models/*.npy
+*.md
+*.docx
+*.pdf
+.git
+.venv
