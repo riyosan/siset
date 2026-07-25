@@ -23,6 +23,11 @@
       </label>
       <p class="upload-hint">Format: .xlsx, .xls, .csv · Maks 50 MB</p>
       <p class="upload-hint">Kolom wajib: <code>karyawan_id, id_skpd, tanggal_kirim, lat, long</code></p>
+      <div style="margin-top: 0.8rem;">
+        <a href="/static/sampel_absensi_pegawai_small.xlsx" download style="display: inline-flex; align-items: center; gap: 0.4rem; background: #0284C7; color: white; padding: 0.45rem 0.9rem; border-radius: 6px; font-size: 0.83rem; font-weight: 600; text-decoration: none; box-shadow: 0 2px 8px rgba(2, 132, 199, 0.25);">
+          📥 Download File Excel Sampel Uji Coba (589 KB)
+        </a>
+      </div>
     </div>
 
     <!-- Preview -->
@@ -97,7 +102,15 @@ function handleFile(file){
   document.getElementById("previewContent").innerHTML = "<p>Memproses upload…</p>";
 
   fetch("/api/upload",{method:"POST",body:fd})
-    .then(r=>r.json()).then(d=>{
+    .then(r => {
+      if(!r.ok) {
+        if(r.status === 413) {
+          throw new Error("Ukuran file melebihi 4.5 MB (batas payload Vercel). Silakan gunakan file Excel sampel Uji Coba < 4.5 MB yang sudah disediakan di atas.");
+        }
+        return r.text().then(t => { throw new Error(`HTTP ${r.status}`); });
+      }
+      return r.json();
+    }).then(d=>{
       if(!d.ok){
         document.getElementById("previewContent").innerHTML=`<p class="err">❌ ${d.error}</p>`;
         document.getElementById("processMsg").textContent="";
@@ -118,7 +131,8 @@ function handleFile(file){
         <p style="font-size:.82rem;color:#666;margin-top:.5rem">Kolom: ${p.kolom.slice(0,15).join(", ")}${p.kolom.length>15?" …":""}</p>`;
       document.getElementById("processMsg").textContent="";
     }).catch(e=>{
-      document.getElementById("previewContent").innerHTML=`<p class="err">Gagal upload: ${e}</p>`;
+      document.getElementById("previewContent").innerHTML=`<p class="err">⚠️ ${e.message || e}</p>`;
+      document.getElementById("processMsg").textContent="";
     });
 }
 
