@@ -32,18 +32,41 @@
 ║  TAHAP 20 │ SHAP Interpretability            [NB Cell 10]        ║
 ╚══════════════════════════════════════════════════════════════════╝
 """
+╔══════════════════════════════════════════════════════════════════╗
+║  Sistem Deteksi Anomali Presensi Pegawai                        ║
+║  Flask Application                                               ║
+║                                                                  ║
+║  URUTAN PIPELINE PREPROCESSING:                                  ║
+║                                                                  ║
+║  [ST]  = diadopsi dari web Streamlit analisis absensi            ║
+║  [NB]  = dari notebook tesisv2_fixed.ipynb                       ║
+║                                                                  ║
+║  TAHAP 0A │ Fix Format Desimal               [ST]                ║
+║  TAHAP 0B │ Deduplikasi Relasional           [ST]                ║
+║  TAHAP 1  │ Mapping & Normalisasi Status     [ST]                ║
+║  TAHAP 2  │ Data Cleaning GPS & Missing      [NB Cell 5]         ║
+║  TAHAP 3  │ Type Conversion & Label Pseudo   [NB Cell 6]         ║
+║  TAHAP 4  │ Feature Engineering Waktu        [ST]                ║
+║  TAHAP 5  │ Coordinate Transformation        [NB Cell 7A]        ║
+║  TAHAP 6  │ ST-DBSCAN -> Centroid Kantor      [NB Cell 7B]        ║
+║  TAHAP 7  │ Feature Geospasial Lanjutan      [ST + NB]           ║
+║  TAHAP 8  │ Feature Deviasi Waktu            [ST]                ║
+║  TAHAP 9  │ Feature Agregat per Karyawan     [ST]                ║
+║  TAHAP 10 │ OHE shift_id                     [NB Cell 7C]        ║
+║  TAHAP 11 │ OHE jenis & status_presensi      [NB Cell 8]         ║
+║  TAHAP 12 │ Klasifikasi Catatan + OHE        [NB Cell 8.0]       ║
+║  TAHAP 13 │ Seleksi Fitur Model              [NB]                ║
+║  TAHAP 14 │ Impute NaN + RobustScaler        [NB Cell 9A]        ║
+║  TAHAP 15 │ Isolation Forest                 [NB Cell 9B]        ║
+║  TAHAP 16 │ Local Outlier Factor             [NB Cell 9C]        ║
+║  TAHAP 17 │ ECOD                             [NB Cell 9D]        ║
+║  TAHAP 18 │ Ensemble Majority Voting         [NB Cell 9E]        ║
+║  TAHAP 19 │ Evaluasi Metrik                  [NB Cell 9F]        ║
+║  TAHAP 20 │ SHAP Interpretability            [NB Cell 10]        ║
+╚══════════════════════════════════════════════════════════════════╝
+"""
 
 import os, io, re, pickle, warnings, sys, time, threading
-import numpy as np
-import pandas as pd
-from flask import Flask, render_template, request, jsonify, send_file
-import plotly.express as px
-import plotly.utils
-import json
-from werkzeug.utils import secure_filename
-
-# Fix for charmap encoding error on Windows console when printing emojis/arrows
-if sys.stdout.encoding.lower() != 'utf-8':
     sys.stdout.reconfigure(encoding='utf-8')
 
 warnings.filterwarnings('ignore')

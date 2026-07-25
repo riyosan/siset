@@ -3,8 +3,8 @@ numpy
 pandas
 scipy
 scikit-learn
-pyod
-plotly
+numba>=0.59.0
+pyod>=1.1.3
 openpyxl
 xlrd
 gunicorn
