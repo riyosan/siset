@@ -1,0 +1,117 @@
+{% extends "base.html" %}
+{% block title %}Kinerja Algoritma{% endblock %}
+{% block head_extra %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <h1 class="page-title">Kinerja & Perbandingan Algoritma</h1>
+  <p class="page-sub">Evaluasi ilmiah: Isolation Forest · Local Outlier Factor · ECOD · Ensemble</p>
+</div>
+
+<!-- 3 CARD ALGORITMA -->
+<div class="algo-grid" id="algoGrid">
+  <p class="loading-msg">Memuat data kinerja…</p>
+</div>
+
+<!-- GROUPED BAR CHART -->
+<div class="card" style="margin-top:1.5rem">
+  <div class="card-header">Perbandingan Metrik Evaluasi (Grouped Bar Chart)</div>
+  <div class="card-body"><canvas id="chartKinerja" height="100"></canvas></div>
+</div>
+
+<!-- NARASI OTOMATIS -->
+<div class="card" style="margin-top:1.5rem">
+  <div class="card-header">📝 Narasi Rekomendasi Otomatis</div>
+  <div class="card-body prose" id="narasiBox">Memuat…</div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const ALGO_COLOR = {IF:"#378ADD", LOF:"#7F77DD", ECOD:"#1D9E75", Ensemble:"#E24B4A"};
+const METRIC_LABEL = {precision:"Precision", recall:"Recall", f1:"F1-Score", auc:"AUC-PR"};
+
+fetch("/api/kinerja")
+  .then(r=>r.json()).then(d=>{
+    if(!d.ok){ document.getElementById("algoGrid").innerHTML=`<p class="err">${d.error}</p>`; return; }
+    const {results, best} = d;
+
+    // ── Card algoritma ──
+    const algos = ["IF","LOF","ECOD","Ensemble"];
+    const grid  = document.getElementById("algoGrid");
+    grid.innerHTML = algos.map(name=>{
+      const m  = results[name] || {};
+      const isBest = name === best;
+      const cm = (m.tp != null) ? `<div class="cm-title">Confusion Matrix</div>
+        <div class="cm-grid">
+        <div class="cm-cell cm-tp"><div class="cm-val">${m.tp??"-"}</div><div class="cm-lbl">TP</div></div>
+        <div class="cm-cell cm-fp"><div class="cm-val">${m.fp??"-"}</div><div class="cm-lbl">FP</div></div>
+        <div class="cm-cell cm-fn"><div class="cm-val">${m.fn??"-"}</div><div class="cm-lbl">FN</div></div>
+        <div class="cm-cell cm-tn"><div class="cm-val">${m.tn??"-"}</div><div class="cm-lbl">TN</div></div>
+      </div>` : "";
+      return `<div class="algo-card ${isBest?"algo-best":""}">
+        <div class="algo-header" style="background:${ALGO_COLOR[name]}">
+          ${name} ${isBest?'<span class="badge-best">★ Terbaik</span>':""}
+        </div>
+        <div class="algo-body">
+          <div class="metric-row"><span>Precision</span><span class="metric-val">${(m.precision??0).toFixed(4)}</span></div>
+          <div class="metric-row"><span>Recall</span><span class="metric-val">${(m.recall??0).toFixed(4)}</span></div>
+          <div class="metric-row"><span>F1-Score</span><span class="metric-val">${(m.f1??0).toFixed(4)}</span></div>
+          <div class="metric-row"><span>AUC-PR</span><span class="metric-val">${(m.auc??0).toFixed(4)}</span></div>
+          ${cm}
+        </div>
+      </div>`;
+    }).join("");
+
+    // ── Grouped bar chart ──
+    const metrics = ["precision","recall","f1","auc"];
+    const allAlgos = ["IF","LOF","ECOD","Ensemble"];
+    new Chart(document.getElementById("chartKinerja"),{
+      type:"bar",
+      data:{
+        labels: metrics.map(m=>METRIC_LABEL[m]),
+        datasets: allAlgos.map(name=>({
+          label: name,
+          data: metrics.map(m=>(results[name]?.[m]??0)),
+          backgroundColor: ALGO_COLOR[name]+"CC",
+          borderColor: ALGO_COLOR[name],
+          borderWidth:1
+        }))
+      },
+      options:{
+        responsive:true,
+        scales:{y:{min:0,max:1,title:{display:true,text:"Skor"}}},
+        plugins:{legend:{position:"top"}}
+      }
+    });
+
+    // ── Narasi otomatis ──
+    const bm = results[best]||{};
+    const em = results["Ensemble"]||{};
+    document.getElementById("narasiBox").innerHTML = `
+      <p>Berdasarkan evaluasi terhadap composite pseudo-label berbasis minimal dua sinyal objektif,
+      algoritma <strong>${best}</strong> menunjukkan kinerja terbaik di antara metode
+      yang diuji dengan F1-Score sebesar <strong>${(bm.f1??0).toFixed(4)}</strong>,
+      Precision <strong>${(bm.precision??0).toFixed(4)}</strong>, dan
+      Recall <strong>${(bm.recall??0).toFixed(4)}</strong>.</p>
+      <p><strong>Isolation Forest (IF)</strong> merupakan algoritma berbasis pohon keputusan
+      acak yang efisien pada data berdimensi tinggi. LOF mendeteksi anomali berdasarkan
+      kepadatan lokal, sehingga sensitif terhadap outlier yang terisolasi secara spasial.
+      ECOD menggunakan distribusi kumulatif empiris per fitur, bebas asumsi distribusi,
+      dan komputasinya sangat efisien.</p>
+      <p>Keputusan akhir anomali pada seluruh dashboard <strong>mengikuti model terbaik
+      secara dinamis</strong>, yaitu <strong>${best}</strong> — bukan selalu Ensemble.
+      Apabila pada pengolahan data berikutnya algoritma lain (misalnya ECOD atau Ensemble)
+      memperoleh F1-Score tertinggi, maka keputusan anomali otomatis berpindah mengikuti
+      model tersebut. Pendekatan ini memastikan sistem selalu memakai detektor dengan
+      performa terbaik pada data yang sedang dianalisis.</p>
+      <p>Sebagai pembanding, <strong>Ensemble Majority Voting</strong> dari ketiga algoritma
+      memperoleh F1-Score <strong>${(em.f1??0).toFixed(4)}</strong> dengan Precision
+      <strong>${(em.precision??0).toFixed(4)}</strong>.</p>
+      <p>Interpretabilitas hasil deteksi disediakan melalui <strong>SHAP (SHapley Additive exPlanations)</strong>
+      pada model Isolation Forest, sehingga setiap anomali dilengkapi penjelasan fitur penyebab utama.</p>`;
+  });
+</script>
+{% endblock %}

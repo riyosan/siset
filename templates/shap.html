@@ -1,0 +1,436 @@
+{% extends "base.html" %}
+{% block title %}SHAP Interpretability{% endblock %}
+
+{% block content %}
+<script src="https://cdn.plot.ly/plotly-3.0.0.min.js"></script>
+
+<style>
+  .shap-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1.2rem; }
+  .shap-full { grid-column: 1 / -1; }
+
+  .shap-info-bar {
+    display: flex; gap: 1rem; flex-wrap: wrap; margin-bottom: 1.2rem;
+  }
+  .shap-kpi {
+    background: #fff; border: 1px solid #e1e8ed; border-radius: 10px;
+    padding: 0.8rem 1.2rem; flex: 1; min-width: 140px; text-align: center;
+  }
+  .shap-kpi .lbl { font-size: 0.75rem; color: #95a5a6; font-weight: 600; text-transform: uppercase; letter-spacing:.5px; }
+  .shap-kpi .val { font-size: 1.5rem; font-weight: 800; color: #2c3e50; }
+
+  .tab-bar { display: flex; gap: 4px; border-bottom: 2px solid #e1e8ed; margin-bottom: 1rem; }
+  .tab-btn {
+    padding: 7px 16px; border: none; background: none; cursor: pointer;
+    font-size: 0.85rem; font-weight: 600; color: #7f8c8d; border-bottom: 2px solid transparent;
+    margin-bottom: -2px; transition: all .15s;
+  }
+  .tab-btn.active { color: #2980b9; border-bottom-color: #2980b9; }
+  .tab-pane { display: none; }
+  .tab-pane.active { display: block; }
+
+  /* Table SHAP */
+  .shap-table { width: 100%; border-collapse: collapse; font-size: 0.8rem; }
+  .shap-table th { background: #1a3557; color: #fff; padding: 9px 10px; text-align: left; font-weight: 600; position: sticky; top: 0; }
+  .shap-table td { padding: 8px 10px; border-bottom: 1px solid #f0f4f8; vertical-align: top; }
+  .shap-table tr:hover { background: #f8fbff; }
+
+  .vote-chip { display: inline-block; padding: 1px 6px; border-radius: 8px; font-size: 0.68rem; font-weight: 700; margin: 1px; }
+  .chip-if   { background: #dbeafe; color: #1d4ed8; }
+  .chip-lof  { background: #dcfce7; color: #166534; }
+  .chip-ecod { background: #fef9c3; color: #854d0e; }
+  .chip-no   { background: #f3f4f6; color: #9ca3af; }
+
+  .reason-pill {
+    display: inline-block; background: #eef2ff; color: #4f46e5;
+    font-size: 0.75rem; padding: 2px 8px; border-radius: 10px; margin: 1px;
+  }
+  .shap-val-pos { color: #e74c3c; font-weight: 700; }
+  .shap-val-neg { color: #27ae60; font-weight: 700; }
+
+  #tableSearch { width: 100%; padding: 7px 12px; border: 1px solid #ddd; border-radius: 8px; font-size: 0.85rem; margin-bottom: 0.7rem; }
+
+  #errorBox { background:#fff5f5; border:1px solid #e74c3c; border-radius:8px; padding:.8rem 1rem; color:#c0392b; font-size:.85rem; margin-bottom:1rem; display:none; }
+</style>
+
+<div class="page-header">
+  <h1 class="page-title">🔍 SHAP Interpretability</h1>
+  <p class="page-sub" id="shapSubtitle">Penjelasan ilmiah mengapa setiap rekaman dianggap anomali — berbasis SHapley Additive exPlanations</p>
+</div>
+
+<!-- Model Selector -->
+<div class="card" style="margin-bottom:1.2rem;">
+  <div class="card-body" style="display:flex; align-items:center; gap:1rem; flex-wrap:wrap;">
+    <span style="font-size:.85rem; font-weight:600; color:#2c3e50;">🧠 Pilih Model untuk SHAP:</span>
+    <div class="model-selector">
+      <button class="model-btn active" data-model="if" onclick="switchModel('if', this)">🌲 Isolation Forest</button>
+      <button class="model-btn" data-model="lof" onclick="switchModel('lof', this)">📍 LOF</button>
+      <button class="model-btn" data-model="ecod" onclick="switchModel('ecod', this)">📊 ECOD</button>
+      <button class="model-btn" data-model="ensemble" onclick="switchModel('ensemble', this)">🔗 Ensemble</button>
+    </div>
+    <span id="modelNote" class="model-note"></span>
+  </div>
+</div>
+
+<style>
+  .model-selector { display:flex; gap:4px; }
+  .model-btn {
+    padding:7px 16px; border:1px solid #ddd; border-radius:20px;
+    background:#fff; cursor:pointer; font-size:.82rem; font-weight:600;
+    transition:all .2s; color:#555;
+  }
+  .model-btn:hover { border-color:#3498db; color:#3498db; }
+  .model-btn.active { background:#3498db; color:#fff; border-color:#3498db; }
+  .model-note { font-size:.75rem; color:#e67e22; font-style:italic; }
+</style>
+
+<div id="errorBox"></div>
+<div id="loadingMsg" style="text-align:center;padding:2rem;color:#666;">⏳ Memuat data SHAP…</div>
+
+<div id="shapContent" style="display:none;">
+
+  <!-- KPI Bar -->
+  <div class="shap-info-bar" id="kpiBar"></div>
+
+  <!-- Tab navigasi -->
+  <div class="tab-bar">
+    <button class="tab-btn active" onclick="switchTab('tabGlobal', this)">📊 Global Importance</button>
+    <button class="tab-btn" onclick="switchTab('tabBox', this)">📦 Distribusi SHAP</button>
+    <button class="tab-btn" onclick="switchTab('tabDep', this)">🔗 Dependence Plot</button>
+    <button class="tab-btn" onclick="switchTab('tabReason', this)">🗺️ Peta Alasan</button>
+    <button class="tab-btn" onclick="switchTab('tabTable', this)">📋 Tabel Top Anomali</button>
+  </div>
+
+  <!-- TAB 1: Global SHAP Feature Importance -->
+  <div id="tabGlobal" class="tab-pane active">
+    <div class="card">
+      <div class="card-header">Top 20 Fitur — mean(|SHAP value|)</div>
+      <div class="card-body">
+        <p style="font-size:.82rem;color:#7f8c8d;margin-bottom:.5rem;">
+          Semakin besar nilai mean(|SHAP|), semakin besar pengaruh fitur tersebut terhadap keputusan deteksi anomali model yang dipilih secara rata-rata di seluruh data.
+        </p>
+        <div id="chartGlobal" style="height:520px;"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- TAB 2: Box Plot Distribusi SHAP -->
+  <div id="tabBox" class="tab-pane">
+    <div class="card">
+      <div class="card-header">Distribusi Nilai SHAP — Top 10 Fitur</div>
+      <div class="card-body">
+        <p style="font-size:.82rem;color:#7f8c8d;margin-bottom:.5rem;">
+          Box plot menunjukkan sebaran nilai SHAP per fitur. Nilai positif = mendorong ke anomali, negatif = mendorong ke normal.
+          Lebar distribusi mencerminkan konsistensi pengaruh fitur.
+        </p>
+        <div id="chartBox" style="height:480px;"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- TAB 3: Dependence Plot -->
+  <div id="tabDep" class="tab-pane">
+    <div class="card">
+      <div class="card-header" id="depTitle">Dependence Plot — Fitur Teratas</div>
+      <div class="card-body">
+        <p style="font-size:.82rem;color:#7f8c8d;margin-bottom:.5rem;">
+          Scatter plot: sumbu X = nilai fitur asli, sumbu Y = nilai SHAP fitur tersebut.
+          Warna menunjukkan nilai fitur kedua yang paling berinteraksi.
+        </p>
+        <div id="chartDep" style="height:480px;"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- TAB 4: Peta Alasan (Top Reasons) -->
+  <div id="tabReason" class="tab-pane">
+    <div class="shap-grid">
+      <div class="card shap-full">
+        <div class="card-header">Fitur Paling Sering Menjadi Alasan Utama Anomali</div>
+        <div class="card-body">
+          <p style="font-size:.82rem;color:#7f8c8d;margin-bottom:.5rem;">
+            Frekuensi fitur yang paling sering menjadi <em>shap_top1_fitur</em> (kontribusi SHAP terbesar) di seluruh rekaman anomali.
+          </p>
+          <div id="chartReason" style="height:380px;"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- TAB 5: Tabel Top Anomali -->
+  <div id="tabTable" class="tab-pane">
+    <div class="card">
+      <div class="card-header">Top 50 Rekaman Anomali — Dilengkapi Alasan SHAP</div>
+      <div class="card-body">
+        <input type="text" id="tableSearch" placeholder="🔍 Cari ID pegawai, SKPD, atau alasan…" oninput="filterTable()">
+        <div style="overflow-x:auto; max-height:520px; overflow-y:auto;">
+          <table class="shap-table">
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>ID Pegawai</th>
+                <th>SKPD</th>
+                <th>Tanggal</th>
+                <th>Skor Anomali</th>
+                <th>Vote</th>
+                <th>Alasan Utama (SHAP)</th>
+                <th>SHAP #1</th>
+                <th>Alasan Kedua (SHAP)</th>
+                <th>SHAP #2</th>
+              </tr>
+            </thead>
+            <tbody id="shapTableBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let ALL_ROWS = [];
+let currentModel = "if";
+
+function switchTab(id, btn) {
+    document.querySelectorAll(".tab-pane").forEach(p => p.classList.remove("active"));
+    document.querySelectorAll(".tab-btn").forEach(b => b.classList.remove("active"));
+    document.getElementById(id).classList.add("active");
+    btn.classList.add("active");
+}
+
+function switchModel(model, btn) {
+    document.querySelectorAll(".model-btn").forEach(b => b.classList.remove("active"));
+    btn.classList.add("active");
+    currentModel = model;
+
+    // Show loading note for slow models
+    const note = document.getElementById("modelNote");
+    if (model === "lof" || model === "ecod" || model === "ensemble") {
+        note.textContent = "⏳ KernelExplainer — proses bisa memakan waktu 1-3 menit...";
+    } else {
+        note.textContent = "";
+    }
+
+    loadShapData(model);
+}
+
+function loadShapData(model) {
+    document.getElementById("shapContent").style.display = "none";
+    document.getElementById("loadingMsg").style.display = "block";
+    document.getElementById("loadingMsg").textContent = model === "if"
+        ? "⏳ Memuat data SHAP (Isolation Forest)…"
+        : `⏳ Menghitung SHAP untuk ${model.toUpperCase()}… (bisa 1-3 menit)`;
+    document.getElementById("errorBox").style.display = "none";
+
+    fetch("/api/shap?model=" + model)
+      .then(r => r.json())
+      .then(d => {
+        document.getElementById("loadingMsg").style.display = "none";
+        document.getElementById("modelNote").textContent = "";
+        if (!d.ok) {
+          const eb = document.getElementById("errorBox");
+          eb.style.display = "block";
+          eb.textContent = "❌ " + d.error;
+          return;
+        }
+        document.getElementById("shapContent").style.display = "block";
+        document.getElementById("shapSubtitle").textContent =
+            `Penjelasan ilmiah berbasis SHAP — Model: ${d.model_label}`;
+        renderKPI(d);
+        renderGlobal(d.global_importance);
+        renderBox(d.box_data);
+        renderDep(d.dep_data);
+        renderReason(d.top_reasons);
+        renderTable(d.table_rows);
+      })
+      .catch(err => {
+        document.getElementById("loadingMsg").style.display = "none";
+        document.getElementById("modelNote").textContent = "";
+        const eb = document.getElementById("errorBox");
+        eb.style.display = "block";
+        eb.textContent = "❌ Request gagal: " + err;
+      });
+}
+
+// Initial load
+loadShapData("if");
+
+// ── KPI ──────────────────────────────────────────────────────────────
+function renderKPI(d) {
+    const kpis = [
+        { lbl: "Jumlah Fitur Model", val: d.n_features },
+        { lbl: "Total Anomali", val: d.n_anomali.toLocaleString() },
+        { lbl: "Expected Value IF", val: d.expected_val.toFixed(4) },
+        { lbl: "Fitur Terpenting", val: d.global_importance[0]?.narasi?.split(" ").slice(0,3).join(" ") + "…" || "—" },
+        { lbl: "Alasan Paling Sering", val: d.top_reasons[0]?.narasi?.split(" ").slice(0,3).join(" ") + "…" || "—" },
+    ];
+    document.getElementById("kpiBar").innerHTML = kpis.map(k =>
+        `<div class="shap-kpi"><div class="lbl">${k.lbl}</div><div class="val">${k.val}</div></div>`
+    ).join("");
+}
+
+// ── Chart 1: Global Importance (horizontal bar) ──────────────────────
+function renderGlobal(data) {
+    // Deduplicate narasi labels — Plotly merges bars with identical Y labels
+    // Append feature name in parentheses when narasi is duplicated
+    const narasiCount = {};
+    data.forEach(d => {
+        const n = d.narasi || d.fitur;
+        narasiCount[n] = (narasiCount[n] || 0) + 1;
+    });
+
+    const seen = {};
+    const names = data.map(d => {
+        const n = d.narasi || d.fitur;
+        if (narasiCount[n] > 1) {
+            seen[n] = (seen[n] || 0) + 1;
+            return `${n} (${d.fitur})`;
+        }
+        return n;
+    }).reverse();
+
+    const values = data.map(d => d.nilai).reverse();
+    const colors = values.map((v, i) => i === values.length-1 ? "#e74c3c" : "#3498db");
+
+    Plotly.newPlot("chartGlobal", [{
+        type: "bar", orientation: "h",
+        x: values, y: names,
+        marker: { color: colors },
+        text: values.map(v => v.toFixed(5)),
+        textposition: "outside",
+        hovertemplate: "<b>%{y}</b><br>mean(|SHAP|) = %{x:.6f}<extra></extra>"
+    }], {
+        margin: { t: 10, b: 50, l: 280, r: 80 },
+        xaxis: { title: "mean(|SHAP value|)", tickformat: ".5f" },
+        yaxis: { type: "category" },
+        plot_bgcolor: "#fafafa",
+        font: { family: "Inter, sans-serif", size: 11 }
+    }, { responsive: true, displayModeBar: false });
+}
+
+// ── Chart 2: Box Plot Distribusi SHAP ────────────────────────────────
+function renderBox(data) {
+    const PALETTE = ["#e74c3c","#3498db","#2ecc71","#f39c12","#9b59b6",
+                     "#1abc9c","#e67e22","#2980b9","#27ae60","#8e44ad"];
+    const traces = data.map((d, i) => ({
+        type: "box", name: d.narasi || d.fitur,
+        y: d.values,
+        marker: { color: PALETTE[i % PALETTE.length] },
+        boxpoints: false,
+        hovertemplate: "<b>%{fullData.name}</b><br>%{y:.6f}<extra></extra>"
+    }));
+
+    Plotly.newPlot("chartBox", traces, {
+        margin: { t: 20, b: 100, l: 60, r: 20 },
+        yaxis: { title: "Nilai SHAP", zeroline: true, zerolinecolor: "#bbb", zerolinewidth: 2 },
+        xaxis: { tickangle: -30 },
+        showlegend: false,
+        plot_bgcolor: "#fafafa",
+        font: { family: "Inter, sans-serif", size: 10 }
+    }, { responsive: true, displayModeBar: false });
+}
+
+// ── Chart 3: Dependence Plot ──────────────────────────────────────────
+function renderDep(dep) {
+    if (!dep || !dep.x) {
+        document.getElementById("chartDep").innerHTML =
+            "<p style='text-align:center;color:#999;padding:40px;'>Data dependence tidak tersedia.</p>";
+        return;
+    }
+    document.getElementById("depTitle").textContent =
+        `Dependence Plot — ${dep.narasi_x}` +
+        (dep.narasi_color ? ` (warna: ${dep.narasi_color})` : "");
+
+    Plotly.newPlot("chartDep", [{
+        type: "scatter", mode: "markers",
+        x: dep.x, y: dep.y,
+        marker: {
+            color: dep.color || dep.y,
+            colorscale: "RdBu_r",
+            size: 5, opacity: 0.65,
+            colorbar: {
+                title: dep.narasi_color || "Nilai SHAP",
+                thickness: 12, len: 0.8
+            }
+        },
+        hovertemplate: `<b>Nilai fitur:</b> %{x}<br><b>SHAP:</b> %{y:.6f}<extra></extra>`
+    }], {
+        margin: { t: 20, b: 50, l: 70, r: 30 },
+        xaxis: { title: dep.narasi_x, zeroline: false },
+        yaxis: { title: `SHAP value — ${dep.narasi_x}`, zeroline: true, zerolinecolor: "#bbb", zerolinewidth: 2 },
+        plot_bgcolor: "#fafafa",
+        font: { family: "Inter, sans-serif", size: 11 }
+    }, { responsive: true, displayModeBar: false });
+}
+
+// ── Chart 4: Top Reasons (horizontal bar) ────────────────────────────
+function renderReason(data) {
+    if (!data || !data.length) {
+        document.getElementById("chartReason").innerHTML =
+            "<p style='text-align:center;color:#999;padding:40px;'>Data alasan tidak tersedia.</p>";
+        return;
+    }
+    const names  = data.map(d => d.narasi || d.fitur).reverse();
+    const vals   = data.map(d => d.jumlah).reverse();
+    const pcts   = vals.map(v => (v / vals.reduce((a,b)=>a+b,0)*100).toFixed(1));
+
+    Plotly.newPlot("chartReason", [{
+        type: "bar", orientation: "h",
+        x: vals, y: names,
+        text: pcts.map(p => p + "%"),
+        textposition: "outside",
+        marker: {
+            color: vals.map((_, i) => `hsl(${210 + i*15}, 60%, ${50 - i*2}%)`),
+        },
+        hovertemplate: "<b>%{y}</b><br>%{x} rekaman (%{text})<extra></extra>"
+    }], {
+        margin: { t: 10, b: 50, l: 280, r: 60 },
+        xaxis: { title: "Jumlah Rekaman Anomali" },
+        plot_bgcolor: "#fafafa",
+        font: { family: "Inter, sans-serif", size: 11 }
+    }, { responsive: true, displayModeBar: false });
+}
+
+// ── Tabel Top 50 ─────────────────────────────────────────────────────
+function renderTable(rows) {
+    ALL_ROWS = rows;
+    drawTable(rows);
+}
+
+function drawTable(rows) {
+    document.getElementById("shapTableBody").innerHTML = rows.map((r, i) => {
+        const ifChip   = r.if_pred   === 1 ? `<span class="vote-chip chip-if">IF</span>`   : `<span class="vote-chip chip-no">IF</span>`;
+        const lofChip  = r.lof_pred  === 1 ? `<span class="vote-chip chip-lof">LOF</span>` : `<span class="vote-chip chip-no">LOF</span>`;
+        const ecodChip = r.ecod_pred === 1 ? `<span class="vote-chip chip-ecod">ECOD</span>`: `<span class="vote-chip chip-no">ECOD</span>`;
+        const shap1Cls = r.shap_top1_nilai >= 0 ? "shap-val-pos" : "shap-val-neg";
+        const shap2Cls = r.shap_top2_nilai >= 0 ? "shap-val-pos" : "shap-val-neg";
+        return `<tr>
+          <td style="color:#95a5a6;">${i+1}</td>
+          <td><strong>${r.karyawan_id}</strong></td>
+          <td style="font-size:.75rem;">${r.id_skpd}</td>
+          <td style="font-size:.75rem;white-space:nowrap;">${r.tanggal}</td>
+          <td><strong>${r.ensemble_score}</strong></td>
+          <td>${ifChip}${lofChip}${ecodChip}</td>
+          <td><span class="reason-pill">${r.alasan_utama}</span></td>
+          <td class="${shap1Cls}">${r.shap_top1_nilai > 0 ? '+' : ''}${r.shap_top1_nilai}</td>
+          <td><span class="reason-pill">${r.alasan_kedua}</span></td>
+          <td class="${shap2Cls}">${r.shap_top2_nilai > 0 ? '+' : ''}${r.shap_top2_nilai}</td>
+        </tr>`;
+    }).join("");
+}
+
+function filterTable() {
+    const q = document.getElementById("tableSearch").value.toLowerCase();
+    if (!q) { drawTable(ALL_ROWS); return; }
+    const filtered = ALL_ROWS.filter(r =>
+        r.karyawan_id.toLowerCase().includes(q) ||
+        r.id_skpd.toLowerCase().includes(q) ||
+        r.alasan_utama.toLowerCase().includes(q) ||
+        r.alasan_kedua.toLowerCase().includes(q)
+    );
+    drawTable(filtered);
+}
+</script>
+{% endblock %}

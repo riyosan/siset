@@ -1,0 +1,161 @@
+{% extends "base.html" %}
+{% block title %}Visualisasi & Hunting{% endblock %}
+
+{% block content %}
+<script src="https://cdn.plot.ly/plotly-3.0.0.min.js"></script>
+
+<div class="page-header">
+  <h1 class="page-title">📊 Visualisasi & Hunting</h1>
+  <p class="page-sub">Eksplorasi data anomali per SKPD dan per pegawai</p>
+</div>
+
+<!-- FILTER -->
+<div class="card filter-card" style="margin-bottom: 1rem;">
+  <div class="card-body filter-row">
+    <div class="filter-group">
+      <label>SKPD</label>
+      <select id="fSkpd" onchange="loadCharts()"><option value="Semua">Semua SKPD</option></select>
+    </div>
+    <div class="filter-group">
+      <label>Karyawan ID (Hunting Pegawai)</label>
+      <input type="text" id="fKaryawan" placeholder="Ketik ID lalu enter" onchange="loadCharts()"/>
+    </div>
+  </div>
+</div>
+
+<div id="loadingMsg" style="text-align:center; padding:2rem; color:#666;">⏳ Memuat visualisasi...</div>
+
+<div id="chartsContainer" style="display:none;">
+    <div class="chart-row">
+      <div class="card chart-card" style="flex:1">
+        <div class="card-header">Distribusi Hasil Deteksi</div>
+        <div class="card-body"><div id="chartStatus"></div></div>
+      </div>
+      <div class="card chart-card" style="flex:1">
+        <div class="card-header">Top 15 Indiscipline by SKPD</div>
+        <div class="card-body"><div id="chartTopSkpd"></div></div>
+      </div>
+    </div>
+
+    <!-- NEW ROW: Masuk & Pulang -->
+    <div class="chart-row" style="margin-bottom: 1.5rem; display: flex; gap: 1rem;">
+      <div style="flex:1; background: transparent; padding: 0;">
+        <div id="chartMasuk"></div>
+      </div>
+      <div style="flex:1; background: transparent; padding: 0;">
+        <div id="chartPulang"></div>
+      </div>
+    </div>
+
+    <div class="chart-row" style="margin-bottom: 1.5rem;">
+      <div class="card chart-card" style="flex:1">
+        <div class="card-header">Trend Harian</div>
+        <div class="card-body"><div id="chartTrend"></div></div>
+      </div>
+    </div>
+
+    <!-- NEW ROW: Jam & Hari -->
+    <div class="chart-row" style="margin-bottom: 1.5rem; display: flex; gap: 1rem;">
+      <div style="flex:1; background: transparent; padding: 0;">
+        <div id="chartJam"></div>
+      </div>
+      <div style="flex:1; background: transparent; padding: 0;">
+        <div id="chartHari"></div>
+      </div>
+    </div>
+
+    <div class="chart-row" id="rowKaryawan" style="display:none;">
+      <div class="card chart-card" style="flex:1; border: 2px solid #e24b4a;">
+        <div class="card-header" style="background:#fff0f0;">🎯 Hunting Pegawai: Timeline Karyawan</div>
+        <div class="card-body"><div id="chartPegawai"></div></div>
+      </div>
+    </div>
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let allSkpd = [];
+
+fetch("/api/visualisasi_data?skpd=Semua")
+  .then(r => r.json())
+  .then(d => {
+    if(d.ok) {
+        allSkpd = d.skpd_list;
+        const sel = document.getElementById("fSkpd");
+        allSkpd.forEach(s => {
+            const opt = document.createElement("option");
+            opt.value = s; opt.textContent = "SKPD " + s;
+            sel.appendChild(opt);
+        });
+        renderCharts(d);
+    }
+  });
+
+function loadCharts() {
+    const skpd = document.getElementById("fSkpd").value;
+    const karyawan = document.getElementById("fKaryawan").value;
+    document.getElementById("chartsContainer").style.display = "none";
+    document.getElementById("loadingMsg").style.display = "block";
+    
+    fetch(`/api/visualisasi_data?skpd=${skpd}&karyawan=${karyawan}`)
+      .then(r => r.json())
+      .then(d => {
+        if (d.ok) {
+          renderCharts(d);
+        } else {
+          document.getElementById("loadingMsg").style.display = "block";
+          document.getElementById("loadingMsg").innerHTML =
+            `<p style="color:#e74c3c">❌ ${d.error}</p>`;
+        }
+      })
+      .catch(err => {
+        document.getElementById("loadingMsg").style.display = "block";
+        document.getElementById("loadingMsg").innerHTML =
+          `<p style="color:#e74c3c">❌ Gagal memuat data: ${err}</p>`;
+      });
+}
+
+function renderCharts(d) {
+    document.getElementById("loadingMsg").style.display = "none";
+    document.getElementById("chartsContainer").style.display = "block";
+    
+    Plotly.newPlot("chartStatus", JSON.parse(d.fig_status));
+    Plotly.newPlot("chartTopSkpd", JSON.parse(d.fig_skpd));
+    Plotly.newPlot("chartTrend", JSON.parse(d.fig_trend));
+    
+    if(d.fig_jam) {
+        Plotly.newPlot("chartJam", JSON.parse(d.fig_jam));
+    } else {
+        document.getElementById("chartJam").innerHTML = "<p style='text-align:center;color:#999;padding:20px;'>Tidak ada data Jam</p>";
+    }
+    
+    if(d.fig_hari) {
+        Plotly.newPlot("chartHari", JSON.parse(d.fig_hari));
+    } else {
+        document.getElementById("chartHari").innerHTML = "<p style='text-align:center;color:#999;padding:20px;'>Tidak ada data Hari</p>";
+    }
+    
+    if(d.fig_masuk) {
+        Plotly.newPlot("chartMasuk", JSON.parse(d.fig_masuk));
+    } else {
+        document.getElementById("chartMasuk").innerHTML = "<p style='text-align:center;color:#999;padding:20px;'>Tidak ada data Masuk</p>";
+    }
+    
+    if(d.fig_pulang) {
+        Plotly.newPlot("chartPulang", JSON.parse(d.fig_pulang));
+    } else {
+        document.getElementById("chartPulang").innerHTML = "<p style='text-align:center;color:#999;padding:20px;'>Tidak ada data Pulang</p>";
+    }
+    
+    
+    if(d.fig_pegawai) {
+        document.getElementById("rowKaryawan").style.display = "flex";
+        Plotly.newPlot("chartPegawai", JSON.parse(d.fig_pegawai));
+    } else {
+        document.getElementById("rowKaryawan").style.display = "none";
+    }
+}
+</script>
+{% endblock %}

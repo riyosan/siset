@@ -1,0 +1,190 @@
+{% extends "base.html" %}
+{% block title %}Upload & Laporan{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <h1 class="page-title">Upload Data & Ekspor Laporan</h1>
+  <p class="page-sub">Upload file Excel/CSV hasil ekspor — sistem akan menjalankan preprocessing dan prediksi secara otomatis</p>
+</div>
+
+<!-- UPLOAD AREA -->
+<div class="card">
+  <div class="card-header">📁 Upload File Presensi</div>
+  <div class="card-body">
+    <div class="upload-zone" id="uploadZone"
+         ondragover="event.preventDefault();this.classList.add('drag-over')"
+         ondragleave="this.classList.remove('drag-over')"
+         ondrop="handleDrop(event)">
+      <div class="upload-icon">📂</div>
+      <p>Seret & lepas file di sini, atau</p>
+      <label class="btn-upload">
+        Pilih File
+        <input type="file" id="fileInput" accept=".xlsx,.xls,.csv" hidden onchange="handleFile(this.files[0])"/>
+      </label>
+      <p class="upload-hint">Format: .xlsx, .xls, .csv · Maks 50 MB</p>
+      <p class="upload-hint">Kolom wajib: <code>karyawan_id, id_skpd, tanggal_kirim, lat, long</code></p>
+    </div>
+
+    <!-- Preview -->
+    <div id="previewBox" style="display:none" class="preview-box">
+      <h4>Preview File</h4>
+      <div id="previewContent"></div>
+      <div class="process-bar">
+        <button class="btn-process" id="btnProcess" onclick="startProcess()">
+          ▶ Jalankan Preprocessing &amp; Prediksi
+        </button>
+        <span id="processMsg" class="process-msg"></span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- EXPORT -->
+<div class="card" style="margin-top:1.5rem">
+  <div class="card-header">⬇ Ekspor Laporan</div>
+  <div class="card-body export-grid">
+    <div class="export-card">
+      <div class="ex-icon">📊</div>
+      <div class="ex-title">Laporan Deteksi Anomali Lengkap</div>
+      <div class="ex-desc">Semua anomali + rekap per SKPD + sheet metrik algoritma</div>
+      <a href="/api/export/anomali" class="btn-export-dl">⬇ Download Excel</a>
+    </div>
+    <div class="export-card">
+      <div class="ex-icon">📋</div>
+      <div class="ex-title">Tabel Detail Anomali</div>
+      <div class="ex-desc">Data detail dengan alasan SHAP per rekaman anomali</div>
+      <a href="/api/export/detail" class="btn-export-dl">⬇ Download Excel</a>
+    </div>
+  </div>
+</div>
+
+<!-- STATUS MODEL -->
+<div class="card" style="margin-top:1.5rem">
+  <div class="card-header">🔧 Status Model</div>
+  <div class="card-body">
+    {% if has_model %}
+    <div class="status-ok">✅ Model tersedia — hasil preprocessing dan prediksi sudah ada. Anda dapat langsung melihat Dashboard, Kinerja, Detail, dan Peta.</div>
+    <div style="margin-top:.75rem;font-size:.85rem;color:#555">
+      Upload file baru akan <strong>mengganti</strong> model yang ada dan menjalankan ulang seluruh pipeline.
+    </div>
+    {% else %}
+    <div class="status-warn">⚠️ Belum ada model — silakan upload file Excel/CSV untuk memulai.</div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function handleDrop(e){
+  e.preventDefault();
+  document.getElementById("uploadZone").classList.remove("drag-over");
+  const file = e.dataTransfer.files[0];
+  if(file) handleFile(file);
+}
+
+function handleFile(file){
+  if(!file) return;
+  const ext = file.name.split(".").pop().toLowerCase();
+  if(!["xlsx","xls","csv"].includes(ext)){
+    alert("Format tidak didukung. Gunakan .xlsx, .xls, atau .csv");
+    return;
+  }
+  const fd = new FormData();
+  fd.append("file", file);
+  document.getElementById("processMsg").textContent = "Mengunggah…";
+  document.getElementById("previewBox").style.display = "block";
+  document.getElementById("previewContent").innerHTML = "<p>Memproses upload…</p>";
+
+  fetch("/api/upload",{method:"POST",body:fd})
+    .then(r=>r.json()).then(d=>{
+      if(!d.ok){
+        document.getElementById("previewContent").innerHTML=`<p class="err">❌ ${d.error}</p>`;
+        document.getElementById("processMsg").textContent="";
+        return;
+      }
+      if(d.mode==="load"){
+        document.getElementById("previewContent").innerHTML=`<p style="color:#1D9E75">${d.msg}</p>`;
+        document.getElementById("processMsg").textContent="";
+        return;
+      }
+      const p = d.preview;
+      document.getElementById("previewContent").innerHTML=`
+        <div class="preview-stats">
+          <div class="ps-item"><span>Total Baris</span><strong>${p.total_baris.toLocaleString("id")}</strong></div>
+          <div class="ps-item"><span>Rentang Tanggal</span><strong>${p.rentang_tanggal.join(" s/d ")}</strong></div>
+          <div class="ps-item"><span>Kolom Terdeteksi</span><strong>${p.kolom.length} kolom</strong></div>
+        </div>
+        <p style="font-size:.82rem;color:#666;margin-top:.5rem">Kolom: ${p.kolom.slice(0,15).join(", ")}${p.kolom.length>15?" …":""}</p>`;
+      document.getElementById("processMsg").textContent="";
+    }).catch(e=>{
+      document.getElementById("previewContent").innerHTML=`<p class="err">Gagal upload: ${e}</p>`;
+    });
+}
+
+let dotInterval = null;
+
+function startProcess(){
+  const btn = document.getElementById("btnProcess");
+  const msg = document.getElementById("processMsg");
+  btn.disabled = true;
+
+  // Animasi titik-titik supaya user tahu masih berjalan
+  let dots = 0;
+  const steps = [
+    "⏳ Membersihkan data",
+    "⏳ Feature engineering & ST-DBSCAN",
+    "⏳ Menjalankan IF · LOF · ECOD",
+    "⏳ Ensemble voting & SHAP",
+    "⏳ Menyimpan hasil"
+  ];
+  let stepIdx = 0;
+  msg.style.color = "#EF9F27";
+  msg.textContent = steps[0] + "…";
+
+  dotInterval = setInterval(()=>{
+    stepIdx = (stepIdx + 1) % steps.length;
+    dots = (dots + 1) % 4;
+    msg.textContent = steps[stepIdx] + ".".repeat(dots+1);
+  }, 3000);
+
+  // Gunakan AbortController dengan timeout 10 menit (600 detik)
+  const controller = new AbortController();
+  const timeoutId  = setTimeout(()=> controller.abort(), 600000);
+
+  fetch("/api/proses", {
+    method: "POST",
+    signal: controller.signal
+  })
+    .then(r => {
+      clearTimeout(timeoutId);
+      if(!r.ok) throw new Error(`HTTP ${r.status}`);
+      return r.json();
+    })
+    .then(d => {
+      clearInterval(dotInterval);
+      btn.disabled = false;
+      if(d.ok){
+        msg.style.color = "#1D9E75";
+        msg.innerHTML = `✅ Selesai! <strong>${d.total_anomali.toLocaleString("id")}</strong> anomali ditemukan dari <strong>${d.total_data.toLocaleString("id")}</strong> rekaman.
+          &nbsp;<a href="/" style="background:#1D9E75;color:#fff;padding:4px 14px;border-radius:20px;font-size:.82rem;text-decoration:none;font-weight:600;">→ Lihat Dashboard</a>`;
+      } else {
+        msg.style.color = "#E24B4A";
+        msg.textContent = `❌ Error: ${d.error}`;
+        console.error(d.detail);
+      }
+    })
+    .catch(e => {
+      clearInterval(dotInterval);
+      clearTimeout(timeoutId);
+      btn.disabled = false;
+      msg.style.color = "#E24B4A";
+      if(e.name === "AbortError"){
+        msg.textContent = "⏰ Timeout — proses terlalu lama. Coba dengan data lebih kecil atau jalankan ulang.";
+      } else {
+        msg.textContent = `❌ Koneksi terputus: ${e.message}. Pastikan server masih berjalan, lalu coba lagi.`;
+      }
+    });
+}
+</script>
+{% endblock %}

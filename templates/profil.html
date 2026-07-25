@@ -1,0 +1,263 @@
+{% extends "base.html" %}
+{% block title %}Profil Pegawai{% endblock %}
+
+{% block head_extra %}
+<script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+{% endblock %}
+
+{% block content %}
+<style>
+  .profil-selector { display:flex; gap:1rem; align-items:center; flex-wrap:wrap; margin-bottom:1.5rem; }
+  .profil-selector input { flex:1; min-width:200px; padding:8px 14px; border:1px solid #ddd; border-radius:8px; font-size:.9rem; }
+  .profil-selector button { padding:8px 18px; background:#3498db; color:#fff; border:none; border-radius:8px; cursor:pointer; font-size:.9rem; }
+  .profil-selector button:hover { background:#2980b9; }
+  .kpi-row { display:grid; grid-template-columns:repeat(auto-fit, minmax(180px, 1fr)); gap:1rem; margin-bottom:1.5rem; }
+  .kpi-card { background:#fff; border-radius:12px; padding:1.2rem; box-shadow:0 2px 8px rgba(0,0,0,.06); text-align:center; }
+  .kpi-card .kpi-value { font-size:1.8rem; font-weight:700; color:#2c3e50; }
+  .kpi-card .kpi-label { font-size:.78rem; color:#7f8c8d; margin-top:.3rem; }
+  .section-title { font-size:1rem; font-weight:600; color:#2c3e50; margin:1.5rem 0 .8rem; padding-bottom:.4rem; border-bottom:2px solid #f0f4f8; }
+  .chart-grid { display:grid; grid-template-columns:repeat(auto-fit, minmax(400px, 1fr)); gap:1.2rem; }
+  .chart-card { background:#fff; border-radius:12px; padding:1rem; box-shadow:0 2px 8px rgba(0,0,0,.06); }
+  .chart-card h4 { font-size:.85rem; color:#7f8c8d; margin:0 0 .5rem; }
+  .peer-stat { display:flex; justify-content:space-between; padding:.5rem 0; border-bottom:1px solid #f5f5f5; font-size:.85rem; }
+  .peer-stat:last-child { border-bottom:none; }
+  .peer-stat .label { color:#7f8c8d; }
+  .peer-stat .value { font-weight:600; color:#2c3e50; }
+  .trend-up { color:#e74c3c; }
+  .trend-down { color:#27ae60; }
+  .trend-stable { color:#7f8c8d; }
+  .reason-list { list-style:none; padding:0; }
+  .reason-list li { padding:.5rem .8rem; margin-bottom:.4rem; background:#f8f9fa; border-radius:6px; font-size:.85rem; display:flex; justify-content:space-between; }
+  .reason-list li .count { background:#e74c3c; color:#fff; border-radius:10px; padding:1px 8px; font-size:.75rem; }
+  .history-table { width:100%; border-collapse:collapse; font-size:.82rem; }
+  .history-table th { background:#f8f9fa; padding:8px; text-align:left; font-weight:600; color:#555; }
+  .history-table td { padding:6px 8px; border-bottom:1px solid #f0f0f0; }
+  .badge-anomali { background:#e74c3c; color:#fff; padding:2px 8px; border-radius:10px; font-size:.72rem; }
+  .badge-normal { background:#27ae60; color:#fff; padding:2px 8px; border-radius:10px; font-size:.72rem; }
+  .notice { background:#fff3cd; border:1px solid #ffc107; border-radius:8px; padding:.8rem 1rem; font-size:.85rem; color:#856404; margin:.5rem 0; }
+  @media(max-width:768px) { .chart-grid { grid-template-columns:1fr; } .kpi-row { grid-template-columns:repeat(2,1fr); } }
+</style>
+
+<div class="page-header">
+  <h1 class="page-title">👤 Profil Pegawai Individual</h1>
+  <p class="page-sub">Analisis mendalam perilaku presensi per pegawai</p>
+</div>
+
+<!-- Employee Selector -->
+<div class="card">
+  <div class="card-body">
+    <div class="profil-selector">
+      <input type="text" id="empSearch" list="empList" autocomplete="off" placeholder="🔍 Ketik atau pilih ID Pegawai..." value="{{ karyawan_id or '' }}">
+      <datalist id="empList"></datalist>
+      <button onclick="loadProfile()">🔍 Tampilkan Profil</button>
+    </div>
+  </div>
+</div>
+
+<!-- Profile Content (hidden until loaded) -->
+<div id="profileContent" style="display:none">
+
+  <!-- KPI Cards -->
+  <div class="kpi-row" id="kpiRow"></div>
+
+  <!-- Monthly Trend -->
+  <h3 class="section-title">📈 Tren Anomali Bulanan</h3>
+  <div class="chart-grid">
+    <div class="chart-card"><h4>Jumlah Anomali per Bulan</h4><div id="chartMonthlyCount"></div></div>
+    <div class="chart-card"><h4>Persentase Anomali per Bulan</h4><div id="chartMonthlyPct"></div></div>
+  </div>
+
+  <!-- Clock Pattern -->
+  <h3 class="section-title">⏰ Pola Jam Masuk & Pulang</h3>
+  <div class="chart-grid">
+    <div class="chart-card"><h4>Distribusi Jam Masuk</h4><div id="chartClockIn"></div></div>
+    <div class="chart-card"><h4>Distribusi Jam Pulang</h4><div id="chartClockOut"></div></div>
+  </div>
+
+  <!-- Feature Contribution replacing Score Timeline -->
+  <h3 class="section-title">📊 Kontribusi Fitur (Rata-rata |SHAP|)</h3>
+  <div class="chart-card"><div id="chartShapBar"></div></div>
+
+  <!-- SHAP Explanations and Peer Stats -->
+  <h3 class="section-title">🔍 Alasan Anomali & Perbandingan</h3>
+  <div class="chart-grid">
+    <div class="chart-card"><h4>Top 5 Alasan Paling Sering</h4><div id="shapReasons"></div></div>
+    <div class="chart-card"><h4>👥 Perbandingan dengan Rekan se-SKPD</h4><div id="peerStats"></div></div>
+  </div>
+
+  <!-- Attendance History -->
+  <h3 class="section-title">📋 Riwayat Presensi</h3>
+  <div class="card">
+    <div class="card-body" style="overflow-x:auto">
+      <div id="historyTable"></div>
+    </div>
+  </div>
+</div>
+
+<!-- Error/Loading -->
+<div id="profileError" style="display:none" class="notice"></div>
+<div id="profileLoading" style="display:none;text-align:center;padding:2rem;color:#7f8c8d">⏳ Memuat data profil...</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// Pecah label panjang jadi maksimal 2 baris (pakai <br>) agar tidak terpotong di chart
+function wrapLabel(text, maxLen){
+  maxLen = maxLen || 22;
+  const s = String(text || "");
+  if(s.length <= maxLen) return s;
+  const words = s.split(" ");
+  let line1 = "", line2 = "";
+  for(const w of words){
+    if((line1 + " " + w).trim().length <= maxLen || line1 === ""){
+      line1 = (line1 + " " + w).trim();
+    } else {
+      line2 = (line2 + " " + w).trim();
+    }
+  }
+  // Jika baris kedua masih terlalu panjang, potong dengan elipsis
+  if(line2.length > maxLen) line2 = line2.slice(0, maxLen - 1) + "…";
+  return line2 ? (line1 + "<br>" + line2) : line1;
+}
+
+// Load employee list for autocomplete
+fetch("/api/profil/list").then(r=>r.json()).then(d=>{
+  if(!d.ok) return;
+  const dl = document.getElementById("empList");
+  d.employees.forEach(e=>{
+    const opt = document.createElement("option");
+    opt.value = e; dl.appendChild(opt);
+  });
+});
+
+// Auto-load if karyawan_id is in URL
+const urlId = "{{ karyawan_id or '' }}";
+if(urlId) { setTimeout(()=>loadProfile(), 300); }
+
+function loadProfile(){
+  const kid = document.getElementById("empSearch").value.trim();
+  if(!kid){ alert("Masukkan ID Pegawai"); return; }
+
+  // Update URL
+  history.pushState(null, "", "/profil/" + kid);
+
+  document.getElementById("profileContent").style.display = "none";
+  document.getElementById("profileError").style.display = "none";
+  document.getElementById("profileLoading").style.display = "block";
+
+  fetch("/api/profil/" + encodeURIComponent(kid))
+    .then(r=>r.json())
+    .then(d=>{
+      document.getElementById("profileLoading").style.display = "none";
+      if(!d.ok){
+        document.getElementById("profileError").style.display = "block";
+        document.getElementById("profileError").textContent = "❌ " + d.error;
+        return;
+      }
+      document.getElementById("profileContent").style.display = "block";
+      renderProfile(d);
+    })
+    .catch(err=>{
+      document.getElementById("profileLoading").style.display = "none";
+      document.getElementById("profileError").style.display = "block";
+      document.getElementById("profileError").textContent = "❌ Gagal memuat: " + err;
+    });
+}
+
+function renderProfile(d){
+  // KPI Cards
+  const trendIcon = d.score_summary.trend === "increasing" ? "🔺" : (d.score_summary.trend === "decreasing" ? "🔻" : "➖");
+  const trendClass = d.score_summary.trend === "increasing" ? "trend-up" : (d.score_summary.trend === "decreasing" ? "trend-down" : "trend-stable");
+  document.getElementById("kpiRow").innerHTML = `
+    <div class="kpi-card"><div class="kpi-value">${d.summary.total_records}</div><div class="kpi-label">Total Rekaman</div></div>
+    <div class="kpi-card"><div class="kpi-value" style="color:#e74c3c">${d.summary.total_anomali}</div><div class="kpi-label">Total Anomali</div></div>
+    <div class="kpi-card"><div class="kpi-value">${d.summary.pct_anomali}%</div><div class="kpi-label">% Anomali</div></div>
+    <div class="kpi-card"><div class="kpi-value" style="font-size:1rem">${d.skpd}</div><div class="kpi-label">SKPD</div></div>
+    <div class="kpi-card"><div class="kpi-value ${trendClass}">${trendIcon} ${d.score_summary.avg_current.toFixed(4)}</div><div class="kpi-label">Skor Rata-rata (Tren: ${d.score_summary.trend})</div></div>
+  `;
+
+  // Monthly Trend
+  if(d.monthly_trend.length < 2){
+    document.getElementById("chartMonthlyCount").innerHTML = '<div class="notice">Data kurang dari 2 bulan — tren belum bisa ditampilkan.</div>';
+    document.getElementById("chartMonthlyPct").innerHTML = '';
+  } else {
+    const months = d.monthly_trend.map(m=>m.bulan);
+    Plotly.newPlot("chartMonthlyCount", [{x:months, y:d.monthly_trend.map(m=>m.anomali), type:"bar", marker:{color:"#e74c3c"}}], {margin:{t:10,b:40,l:40,r:10}, height:250}, {responsive:true});
+    Plotly.newPlot("chartMonthlyPct", [{x:months, y:d.monthly_trend.map(m=>m.pct), type:"scatter", mode:"lines+markers", line:{color:"#e67e22"}}], {margin:{t:10,b:40,l:40,r:10}, height:250, yaxis:{title:"%"}}, {responsive:true});
+  }
+
+  // Clock Pattern
+  if(d.clock_stats.n_masuk < 5){
+    document.getElementById("chartClockIn").innerHTML = '<div class="notice">Data masuk kurang dari 5 rekaman.</div>';
+  } else {
+    Plotly.newPlot("chartClockIn", [{x:d.clock_in_times, type:"histogram", marker:{color:"#3498db"}, nbinsx:20}], {margin:{t:10,b:40,l:40,r:10}, height:220, shapes:[{type:"line",x0:8.25,x1:8.25,y0:0,y1:1,yref:"paper",line:{color:"red",dash:"dash",width:2}}], xaxis:{title:"Jam"}}, {responsive:true});
+  }
+  if(d.clock_stats.n_pulang < 5){
+    document.getElementById("chartClockOut").innerHTML = '<div class="notice">Data pulang kurang dari 5 rekaman.</div>';
+  } else {
+    Plotly.newPlot("chartClockOut", [{x:d.clock_out_times, type:"histogram", marker:{color:"#27ae60"}, nbinsx:20}], {margin:{t:10,b:40,l:40,r:10}, height:220, shapes:[{type:"line",x0:16,x1:16,y0:0,y1:1,yref:"paper",line:{color:"red",dash:"dash",width:2}}], xaxis:{title:"Jam"}}, {responsive:true});
+  }
+
+
+
+  // SHAP Reasons
+  if(d.shap_reasons.length === 0){
+    document.getElementById("shapReasons").innerHTML = '<div class="notice">Tidak ada anomali — penjelasan SHAP tidak tersedia.</div>';
+    document.getElementById("chartShapBar").innerHTML = '';
+  } else {
+    let html = '<ul class="reason-list">';
+    d.shap_reasons.forEach(r=>{ html += `<li><span>${r.narasi}</span><span class="count">${r.jumlah}×</span></li>`; });
+    html += '</ul>';
+    document.getElementById("shapReasons").innerHTML = html;
+
+    if(d.shap_feature_importance.length > 0){
+      const fi = d.shap_feature_importance.slice().reverse();
+      const maxVal = Math.max(...fi.map(f=>f.nilai));
+      Plotly.newPlot("chartShapBar", [{
+        y: fi.map(f=>wrapLabel(f.narasi, 40)), // increase wrap length since it's full width now
+        x: fi.map(f=>f.nilai),
+        customdata: fi.map(f=>f.narasi),   // teks lengkap untuk tooltip
+        type:"bar", orientation:"h",
+        marker:{color:"#8e44ad"},
+        hovertemplate: "<b>%{customdata}</b><br>Rata-rata |SHAP|: %{x:.4f}<extra></extra>"
+      }], {
+        margin:{t:10,b:40,l:10,r:10}, height:340,
+        xaxis:{range:[0, maxVal]},
+        yaxis:{automargin:true, tickfont:{size:11}},
+        hovermode: "closest",
+        hoverlabel:{align:"left", bgcolor:"#2c3e50", font:{color:"#fff", size:12}}
+      }, {responsive:true});
+    }
+  }
+
+  // Peer Comparison
+  const p = d.peer;
+  document.getElementById("peerStats").innerHTML = `
+    <div class="peer-stat"><span class="label">Peringkat di SKPD</span><span class="value">#${p.emp_rank} dari ${p.total_pegawai} pegawai</span></div>
+    <div class="peer-stat"><span class="label">% Anomali Pegawai</span><span class="value">${p.emp_anomali_pct}%</span></div>
+    <div class="peer-stat"><span class="label">% Anomali Rata-rata SKPD</span><span class="value">${p.avg_anomali_pct}%</span></div>
+    <div class="peer-stat"><span class="label">Rata-rata Jam Masuk (Pegawai)</span><span class="value">${d.clock_stats.mean_in !== null ? d.clock_stats.mean_in.toFixed(2) : '-'}</span></div>
+    <div class="peer-stat"><span class="label">Rata-rata Jam Masuk (SKPD)</span><span class="value">${p.peer_clock.mean_in !== null ? p.peer_clock.mean_in.toFixed(2) : '-'}</span></div>
+    <div class="peer-stat"><span class="label">Rata-rata Jam Pulang (Pegawai)</span><span class="value">${d.clock_stats.mean_out !== null ? d.clock_stats.mean_out.toFixed(2) : '-'}</span></div>
+    <div class="peer-stat"><span class="label">Rata-rata Jam Pulang (SKPD)</span><span class="value">${p.peer_clock.mean_out !== null ? p.peer_clock.mean_out.toFixed(2) : '-'}</span></div>
+  `;
+
+
+
+  // History Table
+  let thtml = '<table class="history-table"><thead><tr><th>Tanggal</th><th>Jenis</th><th>Skor</th><th>Status Anomali</th></tr></thead><tbody>';
+  d.history.slice(-100).reverse().forEach(h=>{
+    const badge = h.anomali ? '<span class="badge-anomali">Anomali</span>' : '<span class="badge-normal">Normal</span>';
+    thtml += `<tr><td>${h.tanggal}</td><td>${h.jenis==='M'?'Masuk':'Pulang'}</td><td>${h.ensemble_score.toFixed(4)}</td><td>${badge}</td></tr>`;
+  });
+  thtml += '</tbody></table>';
+  if(d.history.length > 100) thtml += `<p style="font-size:.8rem;color:#7f8c8d;margin-top:.5rem">Menampilkan 100 rekaman terakhir dari ${d.history.length} total.</p>`;
+  document.getElementById("historyTable").innerHTML = thtml;
+}
+
+// Allow Enter key to trigger search
+document.getElementById("empSearch").addEventListener("keypress", function(e){
+  if(e.key === "Enter") loadProfile();
+});
+</script>
+{% endblock %}

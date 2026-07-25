@@ -1,0 +1,449 @@
+{% extends "base.html" %}
+{% block title %}Peta Sebaran{% endblock %}
+{% block head_extra %}
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+{% endblock %}
+
+{% block content %}
+{% if embed_mode %}
+<style>.topbar,.site-footer,#statusBar,.page-header{display:none!important;}.main-content{padding-top:0!important;}</style>
+{% endif %}
+<style>
+  .map-summary-bar {
+    display:flex; gap:.8rem; flex-wrap:wrap; margin-bottom:.8rem;
+  }
+  .map-kpi {
+    background:#fff; border:1px solid #e1e8ed; border-radius:8px;
+    padding:.5rem 1rem; font-size:.82rem; display:flex; align-items:center; gap:.5rem;
+  }
+  .map-kpi strong { font-size:1.1rem; font-weight:800; color:#2c3e50; }
+  .map-legend {
+    display:flex; align-items:center; gap:.7rem; flex-wrap:wrap;
+    font-size:.78rem; color:#7f8c8d; margin-bottom:.5rem;
+  }
+  .legend-section {
+    display:flex; align-items:center; gap:.4rem;
+    background:#fff; border:1px solid #e1e8ed; border-radius:6px;
+    padding:.35rem .7rem;
+  }
+  .legend-section-title {
+    font-weight:700; color:#2c3e50; margin-right:.3rem;
+  }
+  .legend-dot {
+    width:14px; height:14px; border-radius:50%;
+    border:2px solid rgba(255,255,255,.7); display:inline-block; flex-shrink:0;
+  }
+  #mapError { background:#fff5f5; border:1px solid #e74c3c; border-radius:8px;
+    padding:.8rem 1rem; color:#c0392b; font-size:.85rem; margin-bottom:.8rem; display:none; }
+</style>
+
+<div class="page-header">
+  <h1 class="page-title">🗺️ Peta Sebaran Anomali</h1>
+  <p class="page-sub">Visualisasi geografis lokasi presensi anomali — dibedakan antara absen <strong style="color:#2980b9">Masuk</strong> dan <strong style="color:#e74c3c">Pulang</strong></p>
+</div>
+
+<div id="mapError"></div>
+
+<!-- Filter Mode Peta -->
+<div class="card" style="margin-bottom:.8rem;">
+  <div class="card-body" style="display:flex; gap:1rem; align-items:center; flex-wrap:wrap; padding:.8rem 1.2rem;">
+    <div style="font-size:.82rem; font-weight:600; color:#2c3e50;">Mode Tampilan:</div>
+    <select id="mapMode" onchange="switchMapMode()" style="padding:5px 10px; border:1px solid #ddd; border-radius:6px; font-size:.82rem;">
+      <option value="all">🗺️ Semua Anomali (Gradasi Skor Anomali)</option>
+      <option value="lompat">📍 Absen Lompat (garis masuk↔pulang)</option>
+      <option value="dbscan">🔴 DBSCAN-only (lokasi mencurigakan)</option>
+      <option value="sidebyside">🔬 DBSCAN vs ST-DBSCAN (Side-by-Side)</option>
+    </select>
+    <div style="font-size:.82rem; color:#555;">Filter ID:</div>
+    <input type="text" id="mapFilterId" list="mapIdList" autocomplete="off" placeholder="Ketik atau pilih ID pegawai" style="padding:5px 10px; border:1px solid #ddd; border-radius:6px; font-size:.82rem; width:200px;">
+    <datalist id="mapIdList"></datalist>
+    <button onclick="switchMapMode()" style="padding:5px 12px; background:#3498db; color:#fff; border:none; border-radius:6px; font-size:.82rem; cursor:pointer;">Terapkan</button>
+  </div>
+</div>
+
+<div class="map-legend">
+  <div class="legend-section">
+    <span class="legend-section-title">Tingkat Ke-anomalian:</span>
+    <span class="legend-dot" style="background:#2980b9;"></span><span>Absen Masuk (Terang: Normal ↔ Gelap: Anomali)</span>
+    <span class="legend-dot" style="background:#e74c3c;"></span><span>Absen Pulang (Terang: Normal ↔ Gelap: Anomali)</span>
+  </div>
+</div>
+
+<div class="card" id="mapMainCard">
+  <div class="card-body" style="padding:0">
+    <div id="map" style="height:560px;border-radius:0 0 6px 6px"></div>
+  </div>
+</div>
+
+<!-- Side-by-side maps (hidden by default) -->
+<div id="sideBySideContainer" style="display:none;">
+  <div style="display:grid; grid-template-columns:1fr 1fr; gap:1rem;">
+    <div class="card">
+      <div class="card-header" style="background:#e8f4fd;font-weight:700;">🔵 DBSCAN Clustering (Spasial Saja)</div>
+      <div class="card-body" style="padding:0"><div id="mapDbscan" style="height:480px;"></div></div>
+    </div>
+    <div class="card">
+      <div class="card-header" style="background:#fde8e8;font-weight:700;">🔴 ST-DBSCAN Clustering (Spasial + Temporal 24 jam)</div>
+      <div class="card-body" style="padding:0"><div id="mapStdbscan" style="height:480px;"></div></div>
+    </div>
+  </div>
+  <div class="card" style="margin-top:.8rem;">
+    <div class="card-body" style="font-size:.82rem; color:#555;">
+      <strong>Cara membaca:</strong> Titik yang membentuk cluster di peta kiri (DBSCAN) tapi TIDAK membentuk cluster di peta kanan (ST-DBSCAN) = lokasi yang sering dipakai absen tapi di hari berbeda-beda. Ini indikasi anomali — kemungkinan pegawai absen dari rumah/lokasi tidak resmi secara berulang.
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const map = L.map("map").setView([-2.5, 118], 5);
+L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",{
+  attribution:"© OpenStreetMap contributors", maxZoom:18
+}).addTo(map);
+
+// Load employee list for autocomplete
+fetch("/api/profil/list").then(r=>r.json()).then(d=>{
+  if(!d.ok) return;
+  const dl = document.getElementById("mapIdList");
+  d.employees.forEach(e=>{ const opt=document.createElement("option"); opt.value=e; dl.appendChild(opt); });
+});
+
+// Layer groups untuk Masuk dan Pulang
+const layerMasuk  = L.layerGroup().addTo(map);
+const layerPulang = L.layerGroup().addTo(map);
+const layerLines  = L.layerGroup().addTo(map);  // Garis absen lompat
+const layerDbscan = L.layerGroup().addTo(map);  // Titik DBSCAN-only
+
+// Layer control agar user bisa toggle
+L.control.layers(null, {
+  "🔵 Absen Masuk": layerMasuk,
+  "🔴 Absen Pulang": layerPulang,
+  "📍 Garis Lompat": layerLines,
+  "🔴 DBSCAN-only": layerDbscan,
+}, {collapsed: false}).addTo(map);
+
+// Data storage
+let allPoints = [];
+let kasusLompat = [];
+let kasusDbscan = [];
+
+// Skala warna untuk MASUK (biru)
+function scoreToColorMasuk(score) {
+  const s = Math.max(0, Math.min(1, score || 0));
+  if (s < 0.33) return `hsl(207, 70%, ${75 - s*20}%)`;
+  if (s < 0.66) return `hsl(207, 80%, ${55 - s*15}%)`;
+  return `hsl(207, 90%, ${35 - s*10}%)`;
+}
+
+// Skala warna untuk PULANG (merah)
+function scoreToColorPulang(score) {
+  const s = Math.max(0, Math.min(1, score || 0));
+  if (s < 0.33) return `hsl(4, 70%, ${75 - s*20}%)`;
+  if (s < 0.66) return `hsl(4, 80%, ${55 - s*15}%)`;
+  return `hsl(4, 90%, ${35 - s*10}%)`;
+}
+
+let allPresensiPoints = [];
+
+function renderAllPresensi(filterIds = []) {
+    layerMasuk.clearLayers();
+    layerPulang.clearLayers();
+    const bounds = [];
+
+    allPresensiPoints.forEach(p => {
+      if (filterIds.length > 0 && !filterIds.includes(p.karyawan_id)) return;
+      if (p.lat == null || p.long == null) return;
+      
+      const sc = parseFloat(p.ensemble_score) || 0;
+
+      // Tentukan jenis: M = Masuk, P = Pulang
+      const jenis = (p.jenis || "").toUpperCase();
+      const isMasuk = (jenis !== "P"); // Default ke Masuk jika jenis tidak diketahui
+
+      // Warnai berdasarkan TINGKAT KE-ANOMALIAN (skor anomali)
+      const color = isMasuk ? scoreToColorMasuk(sc) : scoreToColorPulang(sc);
+      const borderColor = isMasuk ? "#1b4f72" : "#78281f";
+      const radius = 6;
+      const jenisLabel = isMasuk ? "Masuk" : "Pulang";
+      const jenisIcon  = isMasuk ? "🔵" : "🔴";
+
+      const circle = L.circleMarker([p.lat, p.long], {
+        radius, fillColor: color, color: borderColor,
+        weight: 1.5, opacity: 1, fillOpacity: 0.85
+      });
+
+      circle.bindPopup(`
+        <div style="min-width:200px;font-size:13px;line-height:1.7">
+          <strong>👤 ${p.karyawan_id || "-"}</strong><br/>
+          🏢 ${p.id_skpd || "-"}<br/>
+          📅 ${(p.tanggal_kirim || "").substring(0,16)}<br/>
+          ${jenisIcon} Jenis: <strong>${jenisLabel}</strong><br/>
+          Skor Anomali: <strong>${sc.toFixed(4)}</strong><br/>
+          ⚠ ${p.alasan_utama || "-"}
+        </div>`);
+
+      // Tambahkan ke layer yang sesuai
+      if (isMasuk) {
+        layerMasuk.addLayer(circle);
+      } else {
+        layerPulang.addLayer(circle);
+      }
+
+      bounds.push([p.lat, p.long]);
+    });
+
+    if (bounds.length) map.fitBounds(bounds, {padding:[30,30]});
+}
+
+fetch("/api/peta")
+  .then(r => r.json())
+  .then(d => {
+    if (!d.ok) {
+      const eb = document.getElementById("mapError");
+      eb.style.display = "block";
+      eb.textContent = "❌ " + d.error;
+      return;
+    }
+    
+    allPresensiPoints = d.points || [];
+    renderAllPresensi([]);
+  })
+  .catch(err => {
+    const eb = document.getElementById("mapError");
+    eb.style.display = "block";
+    eb.textContent = "❌ Gagal memuat data peta: " + err;
+  });
+
+// Load kasus anomali untuk mode lompat dan dbscan
+fetch("/api/anomali_kasus")
+  .then(r => r.json())
+  .then(d => {
+    if (!d.ok) return;
+    kasusLompat = d.kasus_lompat || [];
+    kasusDbscan = d.kasus_dbscan || [];
+  });
+
+// Warna random per pegawai
+const LINE_COLORS = ["#e74c3c","#3498db","#27ae60","#8e44ad","#f39c12","#1abc9c","#e67e22","#2c3e50","#d35400","#16a085","#c0392b","#2980b9","#7f8c8d","#f1c40f","#9b59b6"];
+function getColor(idx) { return LINE_COLORS[idx % LINE_COLORS.length]; }
+
+function switchMapMode() {
+  const mode = document.getElementById("mapMode").value;
+  const filterIds = document.getElementById("mapFilterId").value.trim().split(",").map(s => s.trim()).filter(s => s);
+
+  // Clear line and dbscan layers
+  layerLines.clearLayers();
+  layerDbscan.clearLayers();
+
+  if (mode === "lompat") {
+    document.getElementById("mapMainCard").style.display = "block";
+    document.getElementById("sideBySideContainer").style.display = "none";
+    // Show lines between masuk and pulang
+    let data = kasusLompat;
+    if (filterIds.length > 0) {
+      data = data.filter(k => filterIds.includes(k.karyawan_id));
+    }
+
+    const byPegawai = {};
+    data.forEach(k => {
+      if (!byPegawai[k.karyawan_id]) byPegawai[k.karyawan_id] = [];
+      byPegawai[k.karyawan_id].push(k);
+    });
+
+    let colorIdx = 0;
+    const bounds = [];
+    Object.entries(byPegawai).forEach(([kid, records]) => {
+      const color = getColor(colorIdx++);
+      records.forEach(k => {
+        // Marker masuk
+        const mMasuk = L.circleMarker([k.lat_masuk, k.long_masuk], {
+          radius: 8, fillColor: "#27ae60", color: "#fff", weight: 2, fillOpacity: 0.9
+        }).bindPopup(`<b>${kid}</b><br>📍 Lokasi MASUK<br>⏰ ${k.jam_masuk || k.tanggal}<br>Jarak: ${k.jarak_km} km`);
+
+        // Marker pulang
+        const mPulang = L.circleMarker([k.lat_pulang, k.long_pulang], {
+          radius: 8, fillColor: "#e74c3c", color: "#fff", weight: 2, fillOpacity: 0.9
+        }).bindPopup(`<b>${kid}</b><br>📍 Lokasi PULANG<br>⏰ ${k.jam_pulang || k.tanggal}<br>Jarak: ${k.jarak_km} km`);
+
+        // Line connecting them
+        const line = L.polyline([[k.lat_masuk, k.long_masuk], [k.lat_pulang, k.long_pulang]], {
+          color: color, weight: 3, opacity: 0.8, dashArray: "5,5"
+        }).bindPopup(`<b>${kid}</b><br>Jarak masuk↔pulang: <b>${k.jarak_km} km</b><br>Masuk: ${k.jam_masuk || '-'}<br>Pulang: ${k.jam_pulang || '-'}`);
+
+        // Label
+        const label = L.marker([(k.lat_masuk+k.lat_pulang)/2, (k.long_masuk+k.long_pulang)/2], {
+          icon: L.divIcon({className:'', html:`<div style="font-size:11px;font-weight:700;color:${color};text-shadow:1px 1px #fff;">${kid}</div>`, iconSize:[60,20], iconAnchor:[30,10]})
+        });
+
+        layerLines.addLayer(mMasuk);
+        layerLines.addLayer(mPulang);
+        layerLines.addLayer(line);
+        layerLines.addLayer(label);
+        bounds.push([k.lat_masuk, k.long_masuk], [k.lat_pulang, k.long_pulang]);
+      });
+    });
+
+    if (bounds.length) map.fitBounds(bounds, {padding: [40, 40]});
+    // Hide normal layers
+    map.removeLayer(layerMasuk);
+    map.removeLayer(layerPulang);
+
+  } else if (mode === "dbscan") {
+    document.getElementById("mapMainCard").style.display = "block";
+    document.getElementById("sideBySideContainer").style.display = "none";
+    // Show DBSCAN-only points
+    let data = kasusDbscan;
+    if (filterIds.length > 0) {
+      data = data.filter(k => filterIds.includes(k.karyawan_id));
+    }
+
+    const bounds = [];
+    data.forEach(k => {
+      const m = L.circleMarker([k.lat, k.long], {
+        radius: 9, fillColor: "#e74c3c", color: "#fff", weight: 2, fillOpacity: 0.85
+      });
+      bindDynamicPopup(m, "dbscan", k.dbscan_cluster, k.karyawan_id, `<b>${k.karyawan_id}</b><br>🏢 ${k.id_skpd}<br>📝 ${k.catatan || '-'}<br>Kejadian: ${k.jumlah_kejadian}×`);
+
+      const label = L.marker([k.lat, k.long], {
+        icon: L.divIcon({className:'', html:`<div style="font-size:10px;font-weight:700;color:#2c3e50;text-shadow:1px 1px #fff;margin-top:-20px;">${k.karyawan_id}</div>`, iconSize:[50,15], iconAnchor:[25,25]})
+      });
+
+      layerDbscan.addLayer(m);
+      layerDbscan.addLayer(label);
+      bounds.push([k.lat, k.long]);
+    });
+
+    if (bounds.length) map.fitBounds(bounds, {padding: [40, 40]});
+    map.removeLayer(layerMasuk);
+    map.removeLayer(layerPulang);
+
+  } else if (mode === "sidebyside") {
+    renderSideBySide();
+    return;
+
+  } else {
+    // Mode "all" — show normal layers
+    renderAllPresensi(filterIds);
+    map.addLayer(layerMasuk);
+    map.addLayer(layerPulang);
+    document.getElementById("mapMainCard").style.display = "block";
+    document.getElementById("sideBySideContainer").style.display = "none";
+  }
+}
+
+// Side-by-side maps
+let mapDbscanInit = false;
+let mapStdbscanInit = false;
+
+// Helper function to bind popup with dynamic fetching
+function bindDynamicPopup(marker, clusterType, clusterId, kid, staticInfo) {
+    const popupId = `popup-${Math.random().toString(36).substring(7)}`;
+    let isFetched = false;
+    
+    marker.bindPopup(`<div id="${popupId}" style="min-width:220px; font-size:12px; line-height:1.6;">${staticInfo}<br><br><span style="color:#7f8c8d;">⏳ Memuat detail absensi...</span></div>`);
+    
+    marker.on('popupopen', function() {
+        if (isFetched || clusterId === -1 || clusterId === undefined) {
+            if(clusterId === -1 || clusterId === undefined) {
+                document.getElementById(popupId).innerHTML = `<div style="min-width:220px; font-size:12px; line-height:1.6;">${staticInfo}<br><br><span style="color:#7f8c8d;">Titik ini adalah noise (tidak masuk cluster).</span></div>`;
+            }
+            return;
+        }
+        
+        fetch(`/api/cluster_detail?type=${clusterType}&cluster_id=${clusterId}&kid=${encodeURIComponent(kid)}`)
+          .then(r => r.json())
+          .then(d => {
+              isFetched = true;
+              let html = `<div style="min-width:220px; font-size:12px; line-height:1.6;">${staticInfo}<hr style="margin:8px 0; border:0; border-top:1px solid #eee;">`;
+              if (d.ok && d.records && d.records.length > 0) {
+                  html += `<div style="font-weight:600; margin-bottom:5px; color:#2c3e50;">📅 Riwayat Absensi di Lokasi Ini:</div>`;
+                  html += `<div style="max-height:160px; overflow-y:auto; padding-right:5px; border:1px solid #f0f4f8; border-radius:4px; padding:5px; background:#fafbfc;">`;
+                  d.records.forEach(r => {
+                      const icon = r.jenis === 'M' ? '🔵' : '🔴';
+                      const jenis = r.jenis === 'M' ? 'Masuk' : 'Pulang';
+                      const statusLabel = r.anomali_final === 1 ? 'Anomali' : 'Normal';
+                      const color = r.anomali_final === 1 ? '#e74c3c' : '#3498db';
+                      html += `<div style="border-bottom:1px dashed #eee; padding:3px 0; display:flex; justify-content:space-between; align-items:center;">
+                                 <span>${icon} <span style="color:#555;">${r.tanggal}</span></span>
+                                 <span style="color:${color}; font-size:10px; font-weight:700; background:${color}15; padding:2px 4px; border-radius:3px;">${statusLabel}</span>
+                               </div>`;
+                  });
+                  html += `</div>`;
+              } else {
+                  html += `<div style="color:#95a5a6; font-style:italic;">Tidak ada detail riwayat absensi.</div>`;
+              }
+              html += `</div>`;
+              
+              const el = document.getElementById(popupId);
+              if (el) el.innerHTML = html;
+          })
+          .catch(err => {
+              const el = document.getElementById(popupId);
+              if (el) el.innerHTML = `<div style="min-width:220px; font-size:12px; line-height:1.6;">${staticInfo}<br><br><span style="color:#e74c3c;">❌ Gagal memuat detail.</span></div>`;
+          });
+    });
+}
+
+function renderSideBySide() {
+  document.getElementById("mapMainCard").style.display = "none";
+  document.getElementById("sideBySideContainer").style.display = "block";
+
+  // Initialize maps if not done
+  if (!mapDbscanInit) {
+    window.mapLeft = L.map("mapDbscan").setView([3.57, 98.68], 12);
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",{maxZoom:18}).addTo(window.mapLeft);
+    mapDbscanInit = true;
+  }
+  if (!mapStdbscanInit) {
+    window.mapRight = L.map("mapStdbscan").setView([3.57, 98.68], 12);
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",{maxZoom:18}).addTo(window.mapRight);
+    mapStdbscanInit = true;
+  }
+
+  // Fetch cluster data
+  fetch("/api/anomali_kasus")
+    .then(r => r.json())
+    .then(d => {
+      if (!d.ok || !d.cluster_points) return;
+
+      const CLUSTER_COLORS = ["#e74c3c","#3498db","#27ae60","#f39c12","#9b59b6","#1abc9c","#e67e22","#2c3e50","#d35400","#16a085"];
+      const filterIds = document.getElementById("mapFilterId").value.trim().split(",").map(s=>s.trim()).filter(s=>s);
+
+      let pts = d.cluster_points;
+      if (filterIds.length > 0) pts = pts.filter(p => filterIds.includes(p.kid));
+
+      const boundsL = [], boundsR = [];
+
+      // Clear existing
+      window.mapLeft.eachLayer(l => { if (l instanceof L.CircleMarker) window.mapLeft.removeLayer(l); });
+      window.mapRight.eachLayer(l => { if (l instanceof L.CircleMarker) window.mapRight.removeLayer(l); });
+
+      pts.forEach(p => {
+        // DBSCAN (left map)
+        const dbColor = p.db_cluster === -1 ? "#95a5a6" : CLUSTER_COLORS[p.db_cluster % CLUSTER_COLORS.length];
+        const dbRadius = p.db_cluster === -1 ? 3 : 6;
+        const mLeft = L.circleMarker([p.lat, p.long], {radius:dbRadius, fillColor:dbColor, color:"#fff", weight:1, fillOpacity:0.8})
+          .addTo(window.mapLeft);
+        bindDynamicPopup(mLeft, "dbscan", p.db_cluster, p.kid, `<b>👤 Pegawai: ${p.kid}</b><br>🧩 DBSCAN Cluster ID: <b>${p.db_cluster}</b>`);
+        boundsL.push([p.lat, p.long]);
+
+        // ST-DBSCAN (right map)
+        const stColor = p.st_cluster === -1 ? "#95a5a6" : CLUSTER_COLORS[p.st_cluster % CLUSTER_COLORS.length];
+        const stRadius = p.st_cluster === -1 ? 3 : 6;
+        const mRight = L.circleMarker([p.lat, p.long], {radius:stRadius, fillColor:stColor, color:"#fff", weight:1, fillOpacity:0.8})
+          .addTo(window.mapRight);
+        bindDynamicPopup(mRight, "stdbscan", p.st_cluster, p.kid, `<b>👤 Pegawai: ${p.kid}</b><br>🧩 ST-DBSCAN Cluster ID: <b>${p.st_cluster}</b>`);
+        boundsR.push([p.lat, p.long]);
+      });
+
+      if (boundsL.length) { window.mapLeft.fitBounds(boundsL, {padding:[20,20]}); window.mapRight.fitBounds(boundsR, {padding:[20,20]}); }
+
+      // Sync maps
+      window.mapLeft.on("moveend", function() { window.mapRight.setView(window.mapLeft.getCenter(), window.mapLeft.getZoom()); });
+      window.mapRight.on("moveend", function() { window.mapLeft.setView(window.mapRight.getCenter(), window.mapRight.getZoom()); });
+    });
+}
+</script>
+{% endblock %}

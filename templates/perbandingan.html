@@ -1,0 +1,495 @@
+{% extends "base.html" %}
+{% block title %}Perbandingan Periode{% endblock %}
+
+{% block head_extra %}
+<script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+{% endblock %}
+
+{% block content %}
+<style>
+  .period-selector { display:flex; gap:1rem; align-items:flex-end; flex-wrap:wrap; margin-bottom:1.5rem; }
+  .period-group { display:flex; flex-direction:column; gap:.3rem; }
+  .period-group label { font-size:.78rem; color:#7f8c8d; font-weight:600; }
+  .period-group input, .period-group select { padding:7px 12px; border:1px solid #ddd; border-radius:8px; font-size:.85rem; }
+  .btn-compare { padding:8px 20px; background:#3498db; color:#fff; border:none; border-radius:8px; cursor:pointer; font-size:.9rem; font-weight:600; }
+  .btn-compare:hover { background:#2980b9; }
+  .month-chips { display:flex; gap:.5rem; flex-wrap:wrap; margin-bottom:1rem; }
+  .month-chip { padding:6px 14px; border:1px solid #ddd; border-radius:20px; background:#fff; cursor:pointer; font-size:.8rem; transition:all .2s; }
+  .month-chip:hover { border-color:#3498db; }
+  .month-chip.active { background:#3498db; color:#fff; border-color:#3498db; }
+  .kpi-compare { display:grid; grid-template-columns:repeat(auto-fit, minmax(180px, 1fr)); gap:1rem; margin-bottom:1.5rem; }
+  .kpi-compare-card { background:#fff; border-radius:12px; padding:1.2rem; box-shadow:0 2px 8px rgba(0,0,0,.06); text-align:center; }
+  .kpi-compare-card .kpi-label { font-size:.75rem; color:#7f8c8d; margin-bottom:.3rem; font-weight:600; }
+  .kpi-compare-card .kpi-val { font-size:1.5rem; font-weight:700; color:#2c3e50; }
+  .kpi-compare-card .kpi-sub { font-size:.72rem; color:#95a5a6; margin-top:.2rem; }
+  .section-title { font-size:1rem; font-weight:600; color:#2c3e50; margin:1.5rem 0 .8rem; padding-bottom:.4rem; border-bottom:2px solid #f0f4f8; }
+  .chart-card { background:#fff; border-radius:12px; padding:1rem; box-shadow:0 2px 8px rgba(0,0,0,.06); margin-bottom:1.2rem; }
+  .chart-card h4 { font-size:.85rem; color:#7f8c8d; margin:0 0 .5rem; }
+  .trend-badge { display:inline-block; padding:3px 8px; border-radius:12px; font-size:.75rem; font-weight:600; }
+  .trend-up { background:#fde8e8; color:#e74c3c; }
+  .trend-down { background:#e8fde8; color:#27ae60; }
+  .trend-stable { background:#f0f4f8; color:#7f8c8d; }
+  .comp-table { width:100%; border-collapse:collapse; font-size:.82rem; }
+  .comp-table th { background:#f8f9fa; padding:8px; text-align:left; font-weight:600; color:#555; cursor:pointer; }
+  .comp-table td { padding:6px 8px; border-bottom:1px solid #f0f0f0; }
+  .comp-table tr:hover { background:#f8f9fa; }
+  .badge-up { color:#e74c3c; font-weight:600; }
+  .badge-down { color:#27ae60; font-weight:600; }
+  .top-section { display:grid; grid-template-columns:1fr 1fr; gap:1.2rem; margin-bottom:1.5rem; }
+  .top-card { background:#fff; border-radius:12px; padding:1rem; box-shadow:0 2px 8px rgba(0,0,0,.06); }
+  .top-card h4 { font-size:.85rem; color:#7f8c8d; margin:0 0 .8rem; }
+  .top-list { list-style:none; padding:0; }
+  .top-list li { display:flex; justify-content:space-between; padding:.4rem .6rem; border-bottom:1px solid #f5f5f5; font-size:.82rem; }
+  .top-list li:last-child { border-bottom:none; }
+  .filter-row-emp { display:flex; gap:.8rem; align-items:center; margin-bottom:.8rem; flex-wrap:wrap; }
+  .filter-row-emp select, .filter-row-emp input { padding:6px 10px; border:1px solid #ddd; border-radius:6px; font-size:.82rem; }
+  .tab-bar { display:flex; gap:0; margin-bottom:1.5rem; border-bottom:2px solid #e1e8ed; }
+  .tab-btn { padding:10px 20px; border:none; background:transparent; cursor:pointer; font-size:.9rem; font-weight:600; color:#7f8c8d; border-bottom:3px solid transparent; margin-bottom:-2px; transition:all .2s; }
+  .tab-btn:hover { color:#2c3e50; }
+  .tab-btn.active { color:#3498db; border-bottom-color:#3498db; }
+  .tab-content { display:none; }
+  .tab-content.active { display:block; }
+  @media(max-width:768px) { .kpi-compare { grid-template-columns:1fr 1fr; } .top-section { grid-template-columns:1fr; } }
+</style>
+
+<div class="page-header">
+  <h1 class="page-title">📅 Perbandingan Antar-Periode</h1>
+  <p class="page-sub">Bandingkan tren anomali antar bulan — default: semua bulan dalam data</p>
+</div>
+
+<!-- Tab Navigation -->
+<div class="tab-bar">
+  <button class="tab-btn active" onclick="switchTab('monthly')">📊 Per Bulan</button>
+  <button class="tab-btn" onclick="switchTab('custom')">✏️ Custom Range</button>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════ -->
+<!-- TAB 1: PERBANDINGAN PER BULAN (MULTI-PERIOD) -->
+<!-- ═══════════════════════════════════════════════════════ -->
+<div class="tab-content active" id="tabMonthly">
+  <div class="card" style="margin-bottom:1rem;">
+    <div class="card-body">
+      <label style="font-size:.8rem; color:#7f8c8d; font-weight:600; margin-bottom:.5rem; display:block;">Pilih Bulan (klik untuk toggle):</label>
+      <div class="month-chips" id="monthChips">
+        <span style="color:#999; font-size:.8rem;">Memuat...</span>
+      </div>
+    </div>
+  </div>
+
+  <div id="monthlyLoading" style="display:none; text-align:center; padding:2rem; color:#7f8c8d;">⏳ Memuat perbandingan bulanan...</div>
+  <div id="monthlyError" style="display:none;" class="notice"></div>
+  <div id="monthlyResults" style="display:none;"></div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════ -->
+<!-- TAB 2: CUSTOM RANGE (2 PERIODE - EXISTING) -->
+<!-- ═══════════════════════════════════════════════════════ -->
+<div class="tab-content" id="tabCustom">
+  <div class="card" style="margin-bottom:1rem;">
+    <div class="card-body">
+      <div class="period-selector">
+        <div class="period-group">
+          <label>Periode A — Mulai</label>
+          <input type="date" id="paStart">
+        </div>
+        <div class="period-group">
+          <label>Periode A — Akhir</label>
+          <input type="date" id="paEnd">
+        </div>
+        <div class="period-group">
+          <label>Periode B — Mulai</label>
+          <input type="date" id="pbStart">
+        </div>
+        <div class="period-group">
+          <label>Periode B — Akhir</label>
+          <input type="date" id="pbEnd">
+        </div>
+        <button class="btn-compare" onclick="loadCustom()">📊 Bandingkan</button>
+      </div>
+    </div>
+  </div>
+  <div id="customLoading" style="display:none;text-align:center;padding:2rem;color:#7f8c8d">⏳ Memuat perbandingan...</div>
+  <div id="customError" style="display:none" class="notice"></div>
+  <div id="customResults" style="display:none;"></div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+// ═══════════════════════════════════════════════════════
+// TAB SWITCHING
+// ═══════════════════════════════════════════════════════
+function switchTab(tab) {
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+  if (tab === 'monthly') {
+    document.querySelectorAll('.tab-btn')[0].classList.add('active');
+    document.getElementById('tabMonthly').classList.add('active');
+  } else {
+    document.querySelectorAll('.tab-btn')[1].classList.add('active');
+    document.getElementById('tabCustom').classList.add('active');
+  }
+}
+
+// ═══════════════════════════════════════════════════════
+// MONTHLY COMPARISON (MULTI-PERIOD)
+// ═══════════════════════════════════════════════════════
+let availableMonths = [];
+let selectedMonths = [];
+
+// Load available months on page load
+fetch("/api/perbandingan_bulanan")
+  .then(r => r.json())
+  .then(d => {
+    if (!d.ok) {
+      document.getElementById("monthChips").innerHTML = `<span style="color:#e74c3c">${d.error}</span>`;
+      return;
+    }
+    availableMonths = d.available_months;
+    // Default: select all available months
+    selectedMonths = availableMonths.map(m => m.month);
+    renderMonthChips();
+    renderMonthlyResults(d);
+  })
+  .catch(err => {
+    document.getElementById("monthChips").innerHTML = `<span style="color:#e74c3c">Gagal memuat: ${err}</span>`;
+  });
+
+function renderMonthChips() {
+  const container = document.getElementById("monthChips");
+  container.innerHTML = availableMonths.map(m => {
+    const isActive = selectedMonths.includes(m.month);
+    return `<button class="month-chip ${isActive ? 'active' : ''}" onclick="toggleMonth(${m.month})">${m.label}</button>`;
+  }).join("");
+}
+
+function toggleMonth(month) {
+  const idx = selectedMonths.indexOf(month);
+  if (idx >= 0) {
+    if (selectedMonths.length <= 1) return; // minimal 1 bulan
+    selectedMonths.splice(idx, 1);
+  } else {
+    selectedMonths.push(month);
+  }
+  selectedMonths.sort((a, b) => a - b);
+  renderMonthChips();
+  loadMonthly();   // muat ulang perbandingan otomatis setiap kali bulan di-toggle
+}
+
+function loadMonthly() {
+  document.getElementById("monthlyResults").style.display = "none";
+  document.getElementById("monthlyError").style.display = "none";
+  document.getElementById("monthlyLoading").style.display = "block";
+
+  const params = selectedMonths.join(",");
+  fetch(`/api/perbandingan_bulanan?months=${params}`)
+    .then(r => r.json())
+    .then(d => {
+      document.getElementById("monthlyLoading").style.display = "none";
+      if (!d.ok) {
+        document.getElementById("monthlyError").style.display = "block";
+        document.getElementById("monthlyError").textContent = d.error;
+        return;
+      }
+      renderMonthlyResults(d);
+    })
+    .catch(err => {
+      document.getElementById("monthlyLoading").style.display = "none";
+      document.getElementById("monthlyError").style.display = "block";
+      document.getElementById("monthlyError").textContent = "Gagal: " + err;
+    });
+}
+
+function renderMonthlyResults(d) {
+  const container = document.getElementById("monthlyResults");
+  const months = d.selected_months;
+  const periodKeys = d.period_keys;
+  const trends = d.trends;
+
+  let html = '';
+
+  // ── KPI Cards per bulan ──
+  html += '<div class="kpi-compare">';
+  months.forEach((m, i) => {
+    let trendHtml = '';
+    if (i > 0 && trends[i-1]) {
+      const t = trends[i-1];
+      const cls = t.direction === 'up' ? 'trend-up' : (t.direction === 'down' ? 'trend-down' : 'trend-stable');
+      const arrow = t.direction === 'up' ? '▲' : (t.direction === 'down' ? '▼' : '—');
+      const sign = t.change_pct > 0 ? '+' : '';
+      trendHtml = `<span class="trend-badge ${cls}">${arrow} ${sign}${t.change_pct}%</span>`;
+    }
+    html += `<div class="kpi-compare-card">
+      <div class="kpi-label">${m.label}</div>
+      <div class="kpi-val">${m.anomali}</div>
+      <div class="kpi-sub">dari ${m.total} rekaman (${m.pct}%) ${trendHtml}</div>
+      <div class="kpi-sub">${m.pegawai_affected} pegawai · ${m.skpd_affected} SKPD</div>
+    </div>`;
+  });
+  html += '</div>';
+
+  // ── Bar Chart: Anomali vs Normal per Bulan ──
+  html += '<h3 class="section-title">📊 Jumlah Anomali per Bulan</h3>';
+  html += '<div class="chart-card"><div id="chartMonthlyBar"></div></div>';
+
+  // ── Grouped Bar: Per SKPD per Bulan ──
+  html += '<h3 class="section-title">🏢 Perbandingan per SKPD</h3>';
+  html += '<div class="chart-card"><div id="chartSkpdMonthly"></div></div>';
+
+  // ── SKPD Table ──
+  html += '<div class="card" style="margin-bottom:1.2rem"><div class="card-body" style="overflow-x:auto">';
+  html += '<table class="comp-table"><thead><tr><th>SKPD</th>';
+  months.forEach(m => { html += `<th style="text-align:right">${m.label}</th>`; });
+  html += '<th style="text-align:right">Total</th></tr></thead><tbody>';
+  d.skpd_monthly.forEach(row => {
+    html += `<tr><td>${row.id_skpd}</td>`;
+    let total = 0;
+    periodKeys.forEach(pk => {
+      const v = row[pk] || 0;
+      total += v;
+      html += `<td style="text-align:right">${v}</td>`;
+    });
+    html += `<td style="text-align:right; font-weight:600">${total}</td></tr>`;
+  });
+  html += '</tbody></table></div></div>';
+
+  // ── Top Deteriorators & Improvers ──
+  html += '<h3 class="section-title">🏆 Top Perubahan Pegawai</h3>';
+  html += '<div class="top-section">';
+  html += '<div class="top-card"><h4>🔴 Top 10 Memburuk (Anomali Naik)</h4><ul class="top-list">';
+  if (d.top_deteriorators.length === 0) {
+    html += '<li style="color:#7f8c8d">Tidak ada</li>';
+  } else {
+    d.top_deteriorators.forEach(e => {
+      html += `<li><a href="/profil/${e.karyawan_id}" style="color:#2c3e50;text-decoration:none">${e.karyawan_id}</a><span class="badge-up">▲ +${e.trend}</span></li>`;
+    });
+  }
+  html += '</ul></div>';
+  html += '<div class="top-card"><h4>🟢 Top 10 Membaik (Anomali Turun)</h4><ul class="top-list">';
+  if (d.top_improvers.length === 0) {
+    html += '<li style="color:#7f8c8d">Tidak ada</li>';
+  } else {
+    d.top_improvers.forEach(e => {
+      html += `<li><a href="/profil/${e.karyawan_id}" style="color:#2c3e50;text-decoration:none">${e.karyawan_id}</a><span class="badge-down">▼ ${e.trend}</span></li>`;
+    });
+  }
+  html += '</ul></div></div>';
+
+  // ── Employee Table ──
+  html += '<h3 class="section-title">👥 Detail per Pegawai</h3>';
+  html += '<div class="card"><div class="card-body" style="overflow-x:auto">';
+  html += '<div class="filter-row-emp">';
+  html += '<select id="empSkpdFilterM" onchange="filterEmpTableMonthly()"><option value="">Semua SKPD</option></select>';
+  html += '<input type="text" id="empSearchFilterM" placeholder="Cari ID pegawai..." oninput="filterEmpTableMonthly()">';
+  html += '</div>';
+  html += '<table class="comp-table"><thead><tr><th>ID Pegawai</th><th>SKPD</th>';
+  months.forEach(m => { html += `<th style="text-align:right">${m.label}</th>`; });
+  html += '<th style="text-align:right">Total</th><th style="text-align:right">Trend</th></tr></thead>';
+  html += '<tbody id="empBodyMonthly"></tbody></table>';
+  html += '<div id="empInfoMonthly" style="font-size:.78rem;color:#7f8c8d;margin-top:.5rem"></div>';
+  html += '</div></div>';
+
+  container.innerHTML = html;
+  container.style.display = "block";
+
+  // ── Render Plotly Charts ──
+  // Bar chart: anomali per bulan
+  const barColors = ['#3498db', '#e74c3c', '#2ecc71', '#9b59b6', '#f39c12', '#1abc9c'];
+  Plotly.newPlot("chartMonthlyBar", [
+    {
+      x: months.map(m => m.label),
+      y: months.map(m => m.anomali),
+      type: 'bar',
+      name: 'Anomali',
+      marker: { color: '#e74c3c' },
+      text: months.map(m => m.anomali),
+      textposition: 'outside',
+    },
+    {
+      x: months.map(m => m.label),
+      y: months.map(m => m.normal),
+      type: 'bar',
+      name: 'Normal',
+      marker: { color: '#2ecc71' },
+    }
+  ], {
+    barmode: 'group',
+    margin: { t: 30, b: 60, l: 50, r: 20 },
+    height: 320,
+    legend: { orientation: 'h', y: 1.12 },
+    yaxis: { title: 'Jumlah Rekaman' },
+  }, { responsive: true });
+
+  // SKPD grouped bar
+  const skpdNames = d.skpd_monthly.map(s => s.id_skpd);
+  const skpdTraces = months.map((m, i) => ({
+    x: skpdNames,
+    y: d.skpd_monthly.map(s => s[periodKeys[i]] || 0),
+    type: 'bar',
+    name: m.label,
+    marker: { color: barColors[i % barColors.length] },
+  }));
+  Plotly.newPlot("chartSkpdMonthly", skpdTraces, {
+    barmode: 'group',
+    margin: { t: 10, b: 100, l: 50, r: 10 },
+    height: 350,
+    legend: { orientation: 'h', y: 1.1 },
+    xaxis: { tickangle: -45 },
+    yaxis: { title: 'Jumlah Anomali' },
+  }, { responsive: true });
+
+  // Populate SKPD filter for employee table
+  const skpdSet = [...new Set(d.emp_comparison.map(e => e.id_skpd))].sort();
+  const selM = document.getElementById("empSkpdFilterM");
+  if (selM) {
+    skpdSet.forEach(s => { selM.innerHTML += `<option value="${s}">${s}</option>`; });
+  }
+
+  // Store data for filtering
+  window._monthlyEmpData = d.emp_comparison;
+  window._monthlyPeriodKeys = periodKeys;
+  window._monthlyMonths = months;
+  filterEmpTableMonthly();
+}
+
+function filterEmpTableMonthly() {
+  const data = window._monthlyEmpData || [];
+  const periodKeys = window._monthlyPeriodKeys || [];
+  const skpd = document.getElementById("empSkpdFilterM") ? document.getElementById("empSkpdFilterM").value : "";
+  const q = document.getElementById("empSearchFilterM") ? document.getElementById("empSearchFilterM").value.toLowerCase() : "";
+
+  let filtered = data;
+  if (skpd) filtered = filtered.filter(e => e.id_skpd === skpd);
+  if (q) filtered = filtered.filter(e => e.karyawan_id.toLowerCase().includes(q));
+
+  // Sort by total anomali desc
+  filtered.sort((a, b) => (b.total_anomali || 0) - (a.total_anomali || 0));
+
+  const shown = filtered.slice(0, 25);
+  const tbody = document.getElementById("empBodyMonthly");
+  if (!tbody) return;
+
+  tbody.innerHTML = shown.map(e => {
+    const trendCls = e.trend > 0 ? 'badge-up' : (e.trend < 0 ? 'badge-down' : '');
+    const trendTxt = e.trend > 0 ? `▲ +${e.trend}` : (e.trend < 0 ? `▼ ${e.trend}` : '— 0');
+    let row = `<tr><td><a href="/profil/${e.karyawan_id}" style="color:#2c3e50">${e.karyawan_id}</a></td><td>${e.id_skpd}</td>`;
+    periodKeys.forEach(pk => { row += `<td style="text-align:right">${e[pk] || 0}</td>`; });
+    row += `<td style="text-align:right;font-weight:600">${e.total_anomali || 0}</td>`;
+    row += `<td style="text-align:right"><span class="${trendCls}">${trendTxt}</span></td></tr>`;
+    return row;
+  }).join("");
+
+  const info = document.getElementById("empInfoMonthly");
+  if (info) info.textContent = "";
+}
+
+// ═══════════════════════════════════════════════════════
+// CUSTOM RANGE (2 PERIODE - EXISTING FUNCTIONALITY)
+// ═══════════════════════════════════════════════════════
+function loadCustom() {
+  const pa_s = document.getElementById("paStart").value;
+  const pa_e = document.getElementById("paEnd").value;
+  const pb_s = document.getElementById("pbStart").value;
+  const pb_e = document.getElementById("pbEnd").value;
+
+  if (!pa_s || !pa_e || !pb_s || !pb_e) { alert("Lengkapi semua tanggal periode."); return; }
+
+  document.getElementById("customResults").style.display = "none";
+  document.getElementById("customError").style.display = "none";
+  document.getElementById("customLoading").style.display = "block";
+
+  fetch(`/api/perbandingan?period_a_start=${pa_s}&period_a_end=${pa_e}&period_b_start=${pb_s}&period_b_end=${pb_e}`)
+    .then(r => r.json())
+    .then(d => {
+      document.getElementById("customLoading").style.display = "none";
+      if (!d.ok) {
+        document.getElementById("customError").style.display = "block";
+        document.getElementById("customError").textContent = d.error;
+        return;
+      }
+      renderCustomResults(d);
+    })
+    .catch(err => {
+      document.getElementById("customLoading").style.display = "none";
+      document.getElementById("customError").style.display = "block";
+      document.getElementById("customError").textContent = "Gagal: " + err;
+    });
+}
+
+function renderCustomResults(d) {
+  const container = document.getElementById("customResults");
+  let html = '';
+
+  // KPI Cards
+  const metrics = [
+    {label:"Total Rekaman", a:d.summary_a.total, b:d.summary_b.total, trend:d.trends.total},
+    {label:"Total Anomali", a:d.summary_a.anomali, b:d.summary_b.anomali, trend:d.trends.anomali},
+    {label:"% Anomali", a:d.summary_a.pct+"%", b:d.summary_b.pct+"%", trend:d.trends.pct},
+    {label:"SKPD Terdampak", a:d.summary_a.skpd_affected, b:d.summary_b.skpd_affected, trend:d.trends.skpd},
+  ];
+
+  html += '<div class="kpi-compare">';
+  metrics.forEach(m => {
+    const arrowCls = m.trend.direction==="up" ? "trend-up" : (m.trend.direction==="down" ? "trend-down" : "trend-stable");
+    const arrowIcon = m.trend.direction==="up" ? "▲" : (m.trend.direction==="down" ? "▼" : "—");
+    const sign = m.trend.change_pct > 0 ? "+" : "";
+    html += `<div class="kpi-compare-card">
+      <div class="kpi-label">${m.label}</div>
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:.5rem;">
+        <div><div class="kpi-val">${m.a}</div><div class="kpi-sub">Periode A</div></div>
+        <span class="trend-badge ${arrowCls}">${arrowIcon} ${sign}${m.trend.change_pct}%</span>
+        <div><div class="kpi-val">${m.b}</div><div class="kpi-sub">Periode B</div></div>
+      </div>
+    </div>`;
+  });
+  html += '</div>';
+
+  // SKPD Chart
+  html += '<h3 class="section-title">🏢 Perbandingan per SKPD</h3>';
+  html += '<div class="chart-card"><div id="chartSkpdCustom"></div></div>';
+
+  // SKPD Table
+  html += '<div class="card" style="margin-bottom:1.2rem"><div class="card-body" style="overflow-x:auto">';
+  html += '<table class="comp-table"><thead><tr><th>SKPD</th><th style="text-align:right">Anomali Periode A</th><th style="text-align:right">Anomali Periode B</th><th style="text-align:right">Perubahan</th></tr></thead><tbody>';
+  d.skpd_comparison.forEach(s => {
+    const cls = s.direction==="up" ? "badge-up" : (s.direction==="down" ? "badge-down" : "");
+    const badge = s.change_pct > 0 ? `<span class="badge-up">▲ +${s.change_pct}%</span>` : (s.change_pct < 0 ? `<span class="badge-down">▼ ${s.change_pct}%</span>` : `<span>— 0%</span>`);
+    html += `<tr><td>${s.id_skpd}</td><td style="text-align:right">${s.anomali_a}</td><td style="text-align:right">${s.anomali_b}</td><td style="text-align:right">${badge}</td></tr>`;
+  });
+  html += '</tbody></table></div></div>';
+
+  // Top lists
+  html += '<h3 class="section-title">🏆 Top Perubahan Pegawai</h3>';
+  html += '<div class="top-section">';
+  html += '<div class="top-card"><h4>🔴 Top 10 Memburuk</h4><ul class="top-list">';
+  d.top_deteriorators.forEach(e => {
+    html += `<li><a href="/profil/${e.karyawan_id}" style="color:#2c3e50;text-decoration:none">${e.karyawan_id}</a><span class="badge-up">+${e.diff}</span></li>`;
+  });
+  if (!d.top_deteriorators.length) html += '<li style="color:#7f8c8d">Tidak ada</li>';
+  html += '</ul></div>';
+  html += '<div class="top-card"><h4>🟢 Top 10 Membaik</h4><ul class="top-list">';
+  d.top_improvers.forEach(e => {
+    html += `<li><a href="/profil/${e.karyawan_id}" style="color:#2c3e50;text-decoration:none">${e.karyawan_id}</a><span class="badge-down">${e.diff}</span></li>`;
+  });
+  if (!d.top_improvers.length) html += '<li style="color:#7f8c8d">Tidak ada</li>';
+  html += '</ul></div></div>';
+
+  container.innerHTML = html;
+  container.style.display = "block";
+
+  // Render SKPD chart
+  const skpdNames = d.skpd_comparison.map(s => s.id_skpd);
+  Plotly.newPlot("chartSkpdCustom", [
+    {x: skpdNames, y: d.skpd_comparison.map(s => s.anomali_a), name: "Periode A", type: "bar", marker: {color: "#3498db"}},
+    {x: skpdNames, y: d.skpd_comparison.map(s => s.anomali_b), name: "Periode B", type: "bar", marker: {color: "#e74c3c"}},
+  ], {
+    barmode: "group",
+    margin: {t: 10, b: 100, l: 50, r: 10},
+    height: 320,
+    legend: {orientation: "h", y: 1.1},
+    xaxis: {tickangle: -45},
+  }, {responsive: true});
+}
+</script>
+{% endblock %}

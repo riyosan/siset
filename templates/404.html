@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+{% block title %}{% if is_500 %}500 — Kesalahan Server{% else %}404 — Halaman Tidak Ditemukan{% endif %}{% endblock %}
+
+{% block content %}
+<style>
+  .error-page {
+    display: flex; flex-direction: column; align-items: center;
+    justify-content: center; padding: 5rem 2rem; text-align: center;
+  }
+  .error-code {
+    font-size: 7rem; font-weight: 900; line-height: 1;
+    background: linear-gradient(135deg, #1a3557, #3498db);
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+  .error-title { font-size: 1.5rem; font-weight: 700; color: #2c3e50; margin: .5rem 0 1rem; }
+  .error-desc  { font-size: .95rem; color: #7f8c8d; max-width: 420px; line-height: 1.6; margin-bottom: 2rem; }
+  .error-actions { display: flex; gap: 1rem; flex-wrap: wrap; justify-content: center; }
+  .btn-home {
+    background: #1a3557; color: #fff; padding: .65rem 1.5rem;
+    border-radius: 8px; text-decoration: none; font-weight: 600;
+    font-size: .9rem; transition: background .15s;
+  }
+  .btn-home:hover { background: #2980b9; }
+  .btn-back {
+    background: #f0f4f8; color: #2c3e50; padding: .65rem 1.5rem;
+    border-radius: 8px; text-decoration: none; font-weight: 600;
+    font-size: .9rem; transition: background .15s; cursor: pointer; border: none;
+  }
+  .btn-back:hover { background: #e1e8ed; }
+  .error-icon { font-size: 4rem; margin-bottom: 1rem; }
+</style>
+
+<div class="error-page">
+  {% if is_500 %}
+    <div class="error-icon">⚠️</div>
+    <div class="error-code">500</div>
+    <div class="error-title">Kesalahan Server Internal</div>
+    <div class="error-desc">
+      Terjadi kesalahan yang tidak terduga di server. Coba refresh halaman atau kembali ke Dashboard.
+      Jika masalah berlanjut, periksa log terminal Flask.
+    </div>
+  {% else %}
+    <div class="error-icon">🔍</div>
+    <div class="error-code">404</div>
+    <div class="error-title">Halaman Tidak Ditemukan</div>
+    <div class="error-desc">
+      URL yang Anda tuju tidak ada atau telah dipindahkan.
+      Silakan gunakan navigasi di atas atau kembali ke Dashboard.
+    </div>
+  {% endif %}
+
+  <div class="error-actions">
+    <a href="/" class="btn-home">📊 Kembali ke Dashboard</a>
+    <button class="btn-back" onclick="history.back()">← Halaman Sebelumnya</button>
+  </div>
+</div>
+{% endblock %}

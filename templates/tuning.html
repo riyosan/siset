@@ -1,0 +1,1620 @@
+{% extends "base.html" %}
+{% block title %}Parameter Tuning — IF / LOF / ECOD{% endblock %}
+
+{% block content %}
+<script src="https://cdn.plot.ly/plotly-3.0.0.min.js"></script>
+
+<style>
+  .tuning-grid { display: grid; grid-template-columns: 340px 1fr; gap: 1.5rem; align-items: start; }
+  .param-panel { background: #fff; border-radius: 12px; border: 1px solid #e1e8ed; overflow: hidden; position: sticky; top: 80px; }
+  .param-section { padding: 1rem 1.2rem 0.5rem; border-bottom: 1px solid #f0f4f8; }
+  .param-section:last-child { border-bottom: none; }
+  .algo-badge { display: inline-block; padding: 3px 10px; border-radius: 20px; font-size: 0.75rem; font-weight: 700; letter-spacing: 0.5px; margin-bottom: 0.7rem; }
+  .badge-if   { background: #e8f4fd; color: #2980b9; }
+  .badge-lof  { background: #eafaf1; color: #27ae60; }
+  .badge-ecod { background: #fef9e7; color: #d35400; }
+  .badge-ens  { background: #f5eef8; color: #8e44ad; }
+  .param-row  { margin-bottom: 0.9rem; }
+  .param-row label { display: flex; justify-content: space-between; font-size: 0.82rem; font-weight: 600; color: #555; margin-bottom: 3px; }
+  .param-row label span { font-weight: 400; color: #2980b9; font-family: monospace; font-size: 0.88rem; }
+  .param-row input[type=range] { width: 100%; accent-color: #3498db; }
+  .param-row select { width: 100%; padding: 5px 8px; border: 1px solid #ddd; border-radius: 6px; font-size: 0.85rem; }
+  .param-hint { font-size: 0.75rem; color: #95a5a6; margin-top: 2px; }
+
+  .run-btn { width: 100%; padding: 0.9rem; background: linear-gradient(135deg, #2c3e50, #3498db); color: #fff; font-size: 1rem; font-weight: 700; border: none; border-radius: 0 0 12px 12px; cursor: pointer; transition: opacity 0.2s; letter-spacing: 0.5px; }
+  .run-btn:hover { opacity: 0.9; }
+  .run-btn:disabled { opacity: 0.5; cursor: wait; }
+
+  .result-panel { display: flex; flex-direction: column; gap: 1.2rem; }
+  .result-placeholder { background: #f8f9fa; border: 2px dashed #dce1e7; border-radius: 12px; padding: 3rem; text-align: center; color: #adb5bd; }
+  .result-placeholder .icon { font-size: 3rem; margin-bottom: 0.5rem; }
+
+  .metric-cards { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.8rem; }
+  .mc { background: #fff; border-radius: 10px; border: 1px solid #e1e8ed; padding: 1rem; text-align: center; }
+  .mc .algo { font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; color: #95a5a6; margin-bottom: 4px; }
+  .mc .count { font-size: 2rem; font-weight: 800; line-height: 1; }
+  .mc .pct   { font-size: 0.82rem; color: #7f8c8d; margin-top: 2px; }
+  .mc .delta { font-size: 0.78rem; margin-top: 5px; font-weight: 600; }
+  .mc.mc-if   { border-top: 3px solid #2980b9; } .mc.mc-if   .count { color: #2980b9; }
+  .mc.mc-lof  { border-top: 3px solid #27ae60; } .mc.mc-lof  .count { color: #27ae60; }
+  .mc.mc-ecod { border-top: 3px solid #d35400; } .mc.mc-ecod .count { color: #d35400; }
+  .mc.mc-ens  { border-top: 3px solid #8e44ad; } .mc.mc-ens  .count { color: #8e44ad; }
+  .delta-up   { color: #e74c3c; } .delta-dn { color: #27ae60; } .delta-eq { color: #95a5a6; }
+
+  /* Tabel perbandingan tesis */
+  .thesis-table { width: 100%; border-collapse: collapse; font-size: 0.8rem; }
+  .thesis-table th, .thesis-table td { border: 1px solid #dfe4ea; padding: 6px 10px; text-align: center; }
+  .thesis-table thead th { background: #2c3e50; color: #fff; font-weight: 600; }
+  .thesis-table tbody td:first-child { text-align: left; font-weight: 600; color: #2c3e50; background: #f8f9fa; }
+  .thesis-table tbody tr:nth-child(even) td:not(:first-child) { background: #fbfcfd; }
+  .thesis-table .col-before { color: #7f8c8d; }
+  .thesis-table .col-after  { color: #2980b9; font-weight: 600; }
+  .thesis-table .delta-pos  { color: #27ae60; font-weight: 600; }
+  .thesis-table .delta-neg  { color: #e74c3c; font-weight: 600; }
+  .thesis-table .delta-zero { color: #95a5a6; }
+  .thesis-table .row-best td { background: #eafaf1 !important; }
+  .thesis-h6 { font-size: 0.82rem; margin: 1.1rem 0 0.4rem; color: #34495e; font-weight: 700; padding-bottom: 3px; border-bottom: 2px solid #ecf0f1; }
+
+  .section-card { background: #fff; border: 1px solid #e1e8ed; border-radius: 10px; padding: 1rem 1.2rem; }
+  .section-card h4 { margin: 0 0 0.8rem; font-size: 0.92rem; color: #2c3e50; font-weight: 700; }
+
+  .vote-bar { display: flex; gap: 6px; align-items: center; margin-bottom: 6px; }
+  .vote-bar .lbl { font-size: 0.8rem; font-weight: 600; width: 80px; color: #555; flex-shrink: 0; }
+  .vote-bar .bar-wrap { flex: 1; background: #f0f4f8; border-radius: 4px; height: 20px; overflow: hidden; }
+  .vote-bar .bar-fill { height: 100%; border-radius: 4px; transition: width 0.4s ease; }
+  .vote-bar .cnt { font-size: 0.78rem; color: #7f8c8d; width: 80px; text-align: right; flex-shrink: 0; }
+
+  .agree-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; }
+  .agree-item { background: #f8f9fa; border-radius: 8px; padding: 0.6rem 0.8rem; display: flex; justify-content: space-between; align-items: center; }
+  .agree-item .pair { font-size: 0.82rem; font-weight: 600; color: #2c3e50; }
+  .agree-item .val  { font-size: 0.82rem; color: #3498db; font-weight: 700; }
+
+  .history-table { width: 100%; border-collapse: collapse; font-size: 0.8rem; }
+  .history-table th { background: #f8f9fa; padding: 7px 10px; text-align: left; color: #7f8c8d; font-weight: 600; border-bottom: 1px solid #e1e8ed; }
+  .history-table td { padding: 7px 10px; border-bottom: 1px solid #f0f4f8; }
+  .history-table tr:hover { background: #fafbfc; }
+  .badge-run { background: #2980b9; color: #fff; font-size: 0.68rem; padding: 1px 6px; border-radius: 10px; font-weight: 700; }
+
+  #errorBox { background: #fff5f5; border: 1px solid #e74c3c; border-radius: 8px; padding: 0.8rem 1rem; color: #c0392b; font-size: 0.85rem; display: none; }
+
+  @media (max-width: 900px) {
+    .tuning-grid { grid-template-columns: 1fr; }
+    .metric-cards { grid-template-columns: repeat(2, 1fr); }
+    .agree-grid { grid-template-columns: 1fr; }
+    .param-panel { position: static; }
+  }
+
+  /* Tooltip info icon */
+  .info-tip {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 18px; height: 18px; border-radius: 50%;
+    background: #e1e8ed; color: #7f8c8d; font-size: 0.7rem; font-weight: 700;
+    cursor: help; position: relative; margin-left: 6px; vertical-align: middle;
+    transition: background .2s;
+  }
+  .info-tip:hover { background: #3498db; color: #fff; }
+  .info-tip:hover::after {
+    content: attr(data-tip);
+    position: absolute; bottom: calc(100% + 8px); left: 50%; transform: translateX(-50%);
+    background: #2c3e50; color: #fff; font-size: 0.75rem; font-weight: 400;
+    padding: 10px 14px; border-radius: 8px; width: 300px;
+    white-space: pre-line; line-height: 1.5;
+    box-shadow: 0 4px 12px rgba(0,0,0,.2); z-index: 999;
+    pointer-events: none;
+  }
+  .info-tip:hover::before {
+    content: ""; position: absolute; bottom: calc(100% + 2px); left: 50%; transform: translateX(-50%);
+    border: 6px solid transparent; border-top-color: #2c3e50; z-index: 999;
+  }
+</style>
+
+<div class="page-header">
+  <h1 class="page-title">⚙️ Parameter Tuning</h1>
+  <p class="page-sub">Eksplorasi parameter IF, LOF, dan ECOD — Hasil tuning akan OTOMATIS TERSIMPAN dan memperbarui model</p>
+</div>
+
+<div class="tuning-grid">
+
+  <!-- ═══ PANEL PARAMETER ═══ -->
+  <div class="param-panel">
+
+    <!-- IF -->
+    <div class="param-section">
+      <div class="algo-badge badge-if">🌲 Isolation Forest</div>
+      <div class="param-row">
+        <label>n_estimators <span id="lbl_if_n_estimators">200</span></label>
+        <input type="range" id="if_n_estimators" min="10" max="1000" step="10" value="200"
+               oninput="document.getElementById('lbl_if_n_estimators').textContent=this.value">
+        <div class="param-hint">Jumlah pohon. Makin banyak → lebih stabil, lebih lambat</div>
+      </div>
+      <div class="param-row">
+        <label>contamination <span id="lbl_if_contamination">0.015</span></label>
+        <input type="range" id="if_contamination" min="0.005" max="0.5" step="0.005" value="0.015"
+               oninput="document.getElementById('lbl_if_contamination').textContent=parseFloat(this.value).toFixed(3)">
+        <div class="param-hint">Proporsi data anomali yang diasumsikan (1%–50%)</div>
+      </div>
+      <div class="param-row">
+        <label>max_samples</label>
+        <select id="if_max_samples">
+          <option value="auto" selected>auto</option>
+          <option value="256">256</option>
+          <option value="512">512</option>
+          <option value="1024">1024</option>
+          <option value="2048">2048</option>
+        </select>
+        <div class="param-hint">Jumlah sampel per pohon. 'auto' = min(256, n_samples)</div>
+      </div>
+    </div>
+
+    <!-- LOF -->
+    <div class="param-section">
+      <div class="algo-badge badge-lof">📍 Local Outlier Factor</div>
+      <div class="param-row">
+        <label>n_neighbors <span id="lbl_lof_n_neighbors">70</span></label>
+        <input type="range" id="lof_n_neighbors" min="2" max="200" step="1" value="70"
+               oninput="document.getElementById('lbl_lof_n_neighbors').textContent=this.value">
+        <div class="param-hint">Jumlah tetangga. Kecil → sensitif noise, besar → cakupan luas</div>
+      </div>
+      <div class="param-row">
+        <label>contamination <span id="lbl_lof_contamination">0.005</span></label>
+        <input type="range" id="lof_contamination" min="0.005" max="0.5" step="0.005" value="0.005"
+               oninput="document.getElementById('lbl_lof_contamination').textContent=parseFloat(this.value).toFixed(3)">
+        <div class="param-hint">Sama dengan IF — proporsi anomali yang diharapkan</div>
+      </div>
+      <div class="param-row">
+        <label>metric</label>
+        <select id="lof_metric">
+          <option value="minkowski" selected>minkowski (default)</option>
+          <option value="euclidean">euclidean</option>
+          <option value="manhattan">manhattan</option>
+          <option value="chebyshev">chebyshev</option>
+        </select>
+        <div class="param-hint">Metrik jarak untuk menghitung kepadatan lokal</div>
+      </div>
+    </div>
+
+    <!-- ECOD -->
+    <div class="param-section">
+      <div class="algo-badge badge-ecod">📈 ECOD</div>
+      <div class="param-row">
+        <label>contamination <span id="lbl_ecod_contamination">0.005</span></label>
+        <input type="range" id="ecod_contamination" min="0.005" max="0.5" step="0.005" value="0.005"
+               oninput="document.getElementById('lbl_ecod_contamination').textContent=parseFloat(this.value).toFixed(3)">
+        <div class="param-hint">ECOD hanya memiliki satu parameter utama</div>
+      </div>
+    </div>
+
+    <!-- ENSEMBLE -->
+    <div class="param-section">
+      <div class="algo-badge badge-ens">🗳️ Ensemble</div>
+      <div class="param-row">
+        <label>min_votes untuk anomali <span id="lbl_ensemble_min_votes">2</span></label>
+        <input type="range" id="ensemble_min_votes" min="1" max="3" step="1" value="2"
+               oninput="document.getElementById('lbl_ensemble_min_votes').textContent=this.value">
+        <div class="param-hint">1 = lebih sensitif (recall tinggi) | 3 = lebih ketat (precision tinggi)</div>
+      </div>
+    </div>
+
+    <button class="run-btn" id="runBtn" onclick="runTuning()">▶ Jalankan Tuning</button>
+  </div>
+
+  <!-- ═══ PANEL HASIL ═══ -->
+  <div class="result-panel">
+
+    <div id="errorBox"></div>
+
+    <!-- ═══ GRID SEARCH SECTION ═══ -->
+    <div class="section-card" id="gridSearchCard">
+      <div style="display:flex; justify-content:space-between; align-items:center; gap:.5rem; margin-bottom:.8rem;">
+        <h4 style="margin:0;">🔎 Grid Search — Cari Parameter Terbaik Otomatis</h4>
+        <div style="display:flex; gap:.5rem; align-items:center;">
+          <button class="run-btn" id="resumeGridBtn" onclick="runGridSearch(true)"
+            style="display:none; width:auto; padding:.5rem 1rem; border-radius:8px; font-size:.85rem; background:#16a085;">
+            Lanjutkan Grid Search
+          </button>
+          <button class="run-btn" id="gridBtn" onclick="runGridSearch()"
+            style="width:auto; padding:.5rem 1rem; border-radius:8px; font-size:.85rem;">
+            ▶ Jalankan Grid Search
+          </button>
+        </div>
+      </div>
+      <p style="font-size:.82rem; color:#7f8c8d; margin:0 0 .8rem;">
+        Grid Search akan mencoba banyak kombinasi parameter untuk IF, LOF, dan ECOD — lalu memilih yang F1 Score-nya paling tinggi.
+        Hasil akan <strong>tersimpan otomatis</strong> (models/grid_search_results.pkl) dan tetap muncul saat halaman dibuka ulang.
+      </p>
+      <div id="gridCheckpointNotice" style="display:none; margin:0 0 .8rem; padding:.7rem .8rem; border:1px solid #16a085; border-radius:6px; background:#eafaf1; color:#0e6251; font-size:.82rem;"></div>
+
+      <!-- Parameter Grid -->
+      <details style="margin-bottom:.8rem;">
+        <summary style="cursor:pointer; font-size:.8rem; color:#2980b9; font-weight:600;">⚙️ Atur rentang nilai grid (opsional)</summary>
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:.6rem; margin-top:.5rem; padding:.6rem; background:#f8f9fa; border-radius:6px;">
+          <div class="param-row">
+            <label>IF — contamination</label>
+            <input type="text" id="grid_if_cont" value="0.02, 0.03, 0.035, 0.04, 0.042, 0.045, 0.05, 0.06, 0.07, 0.08"
+                   style="width:100%; padding:4px 8px; border:1px solid #ddd; border-radius:4px; font-size:.78rem;">
+          </div>
+          <div class="param-row">
+            <label>IF — n_estimators</label>
+            <input type="text" id="grid_if_nest" value="200, 300, 400, 500"
+                   style="width:100%; padding:4px 8px; border:1px solid #ddd; border-radius:4px; font-size:.78rem;">
+          </div>
+          <div class="param-row">
+            <label>LOF — contamination</label>
+            <input type="text" id="grid_lof_cont" value="0.02, 0.03, 0.035, 0.04, 0.042, 0.045, 0.05, 0.06, 0.07, 0.08"
+                   style="width:100%; padding:4px 8px; border:1px solid #ddd; border-radius:4px; font-size:.78rem;">
+          </div>
+          <div class="param-row">
+            <label>LOF — n_neighbors</label>
+            <input type="text" id="grid_lof_nnb" value="40, 50, 60, 70, 80, 90, 100"
+                   style="width:100%; padding:4px 8px; border:1px solid #ddd; border-radius:4px; font-size:.78rem;">
+          </div>
+          <div class="param-row" style="grid-column:1/-1;">
+            <label>LOF — metric</label>
+            <input type="text" id="grid_lof_metric" value="minkowski, euclidean, manhattan, chebyshev"
+                   style="width:100%; padding:4px 8px; border:1px solid #ddd; border-radius:4px; font-size:.78rem;">
+          </div>
+          <div class="param-row" style="grid-column:1/-1;">
+            <label>ECOD — contamination</label>
+            <input type="text" id="grid_ecod_cont" value="0.02, 0.03, 0.035, 0.04, 0.042, 0.045, 0.05, 0.06, 0.07, 0.08"
+                   style="width:100%; padding:4px 8px; border:1px solid #ddd; border-radius:4px; font-size:.78rem;">
+          </div>
+        </div>
+      </details>
+
+      <div id="gridProgress" style="display:none; padding:.8rem; background:#fff5e1; border:1px solid #f39c12; border-radius:6px; font-size:.85rem; color:#6f4b13; margin-bottom:.8rem;">
+        <div style="display:flex; align-items:center; justify-content:space-between; gap:.75rem; margin-bottom:.45rem;">
+          <strong id="gridProgressTitle">Menyiapkan grid search...</strong>
+          <span id="gridProgressPercent" style="font-weight:800; color:#d35400;">0%</span>
+        </div>
+        <div style="height:10px; background:#fdebd0; border-radius:999px; overflow:hidden; border:1px solid #f8c471;">
+          <div id="gridProgressBar" style="height:100%; width:0%; background:linear-gradient(90deg,#f39c12,#27ae60); transition:width .35s ease;"></div>
+        </div>
+        <div id="gridProgressText" style="margin-top:.45rem; color:#7d5b1f;">Menunggu server memulai proses...</div>
+        <div id="gridProgressMeta" style="margin-top:.25rem; color:#9a6b17; font-size:.78rem;"></div>
+      </div>
+
+      <div id="gridResults" style="display:none;">
+        <!-- Timestamp & info -->
+        <div id="gridMeta" style="font-size:.78rem; color:#7f8c8d; margin-bottom:.8rem;"></div>
+
+        <!-- Best params summary -->
+        <div style="display:grid; grid-template-columns:repeat(3,1fr); gap:.6rem; margin-bottom:1rem;">
+          <div style="background:#e8f4fd; border-radius:8px; padding:.8rem; border-left:3px solid #2980b9;">
+            <div style="font-size:.72rem; color:#2980b9; font-weight:700; text-transform:uppercase;">Best IF</div>
+            <div id="bestIf" style="font-size:.82rem; margin-top:4px;"></div>
+          </div>
+          <div style="background:#eafaf1; border-radius:8px; padding:.8rem; border-left:3px solid #27ae60;">
+            <div style="font-size:.72rem; color:#27ae60; font-weight:700; text-transform:uppercase;">Best LOF</div>
+            <div id="bestLof" style="font-size:.82rem; margin-top:4px;"></div>
+          </div>
+          <div style="background:#fef9e7; border-radius:8px; padding:.8rem; border-left:3px solid #d35400;">
+            <div style="font-size:.72rem; color:#d35400; font-weight:700; text-transform:uppercase;">Best ECOD</div>
+            <div id="bestEcod" style="font-size:.82rem; margin-top:4px;"></div>
+          </div>
+        </div>
+
+        <button onclick="applyBestParams()"
+          style="width:100%; padding:.7rem; background:linear-gradient(135deg,#16a085,#27ae60); color:#fff; border:none; border-radius:8px; font-size:.88rem; font-weight:700; cursor:pointer; margin-bottom:1rem;">
+          ✨ Terapkan Parameter Terbaik ke Slider Tuning
+        </button>
+
+        <!-- Charts -->
+        <div style="margin-bottom:1rem;">
+          <h5 style="font-size:.85rem; margin-bottom:.5rem;">🌲 Isolation Forest — F1 Score vs Contamination (per n_estimators)</h5>
+          <div id="chartGridIF" style="height:300px;"></div>
+        </div>
+
+        <div style="margin-bottom:1rem;">
+          <h5 style="font-size:.85rem; margin-bottom:.5rem;">📍 LOF — Heatmap F1 Score (n_neighbors × contamination)</h5>
+          <div id="chartGridLOF" style="height:400px;"></div>
+        </div>
+
+        <div style="margin-bottom:1rem;">
+          <h5 style="font-size:.85rem; margin-bottom:.5rem;">📈 ECOD — F1 Score vs Contamination</h5>
+          <div id="chartGridECOD" style="height:260px;"></div>
+        </div>
+
+        <div style="margin-bottom:1rem;">
+          <h5 style="font-size:.85rem; margin-bottom:.5rem;">🏆 Perbandingan Model Terbaik Tiap Algoritma</h5>
+          <div id="chartGridBest" style="height:280px;"></div>
+        </div>
+
+        <div style="margin-bottom:1rem;">
+          <h5 style="font-size:.85rem; margin-bottom:.5rem;">🎯 Ensemble — Metrik vs Threshold Voting</h5>
+          <div id="chartEnsThreshold" style="height:260px;"></div>
+        </div>
+
+        <div style="margin-bottom:1rem;">
+          <h5 style="font-size:.85rem; margin-bottom:.5rem;">📊 Distribusi Ensemble Score (Normal vs Anomali)</h5>
+          <div id="chartScoreDist" style="height:260px;"></div>
+        </div>
+
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:1rem; margin-bottom:1rem;">
+          <div>
+            <h5 style="font-size:.85rem; margin-bottom:.5rem;">🌲 IF: Precision vs Recall (warna = F1)</h5>
+            <div id="chartPR_IF" style="height:280px;"></div>
+          </div>
+          <div>
+            <h5 style="font-size:.85rem; margin-bottom:.5rem;">📍 LOF: Precision vs Recall (warna = F1)</h5>
+            <div id="chartPR_LOF" style="height:280px;"></div>
+          </div>
+        </div>
+
+        <!-- Ensemble best summary -->
+        <div id="ensembleBestCard" style="display:none; background:#f5eef8; border-radius:8px; padding:.8rem; border-left:3px solid #8e44ad; margin-bottom:1rem;">
+          <div style="font-size:.72rem; color:#8e44ad; font-weight:700; text-transform:uppercase;">Best Ensemble</div>
+          <div id="bestEnsemble" style="font-size:.82rem; margin-top:4px;"></div>
+        </div>
+
+        <!-- Perbandingan Default vs Grid Search Best -->
+        <div style="margin-bottom:1rem;">
+          <h5 style="font-size:.85rem; margin-bottom:.5rem;">⚖️ Perbandingan: Default (Baseline) vs Grid Search Terbaik</h5>
+          <div id="chartDefaultVsBest" style="height:320px;"></div>
+        </div>
+
+        <!-- TABEL PERBANDINGAN UNTUK TESIS: Parameter & Performa Sebelum vs Sesudah Grid -->
+        <div style="margin-bottom:1rem; border:1px solid #e0e0e0; border-radius:8px; padding:1rem; background:#fff;">
+          <h5 style="font-size:.9rem; margin-bottom:.3rem; color:#2c3e50;">📑 Tabel Perbandingan untuk Tesis</h5>
+          <p style="font-size:.75rem; color:#7f8c8d; margin-bottom:.8rem;">Format Aspek · Sebelum Grid Search · Sesudah Grid Search · Perubahan. Siap disalin ke Word/Excel.</p>
+
+          <!-- Tabel per-algoritma (gaya Tabel 4.x tesis) -->
+          <h6 class="thesis-h6">🌲 Isolation Forest — Sebelum vs Sesudah Grid Search</h6>
+          <div style="overflow-x:auto;"><table id="tblThesisIF" class="thesis-table"></table></div>
+
+          <h6 class="thesis-h6">📍 Local Outlier Factor — Sebelum vs Sesudah Grid Search</h6>
+          <div style="overflow-x:auto;"><table id="tblThesisLOF" class="thesis-table"></table></div>
+
+          <h6 class="thesis-h6">📈 ECOD — Sebelum vs Sesudah Grid Search</h6>
+          <div style="overflow-x:auto;"><table id="tblThesisECOD" class="thesis-table"></table></div>
+
+          <h6 class="thesis-h6">🧩 Ensemble — Sebelum vs Sesudah Grid Search</h6>
+          <div style="overflow-x:auto;"><table id="tblThesisENS" class="thesis-table"></table></div>
+
+          <!-- Tabel ringkasan lintas algoritma -->
+          <h6 class="thesis-h6">🏆 Ringkasan Kinerja Seluruh Algoritma (Sesudah Grid Search)</h6>
+          <div style="overflow-x:auto;"><table id="tblThesisSummary" class="thesis-table"></table></div>
+
+          <!-- Tabel confusion matrix lintas algoritma -->
+          <h6 class="thesis-h6">🔢 Confusion Matrix Seluruh Algoritma (Sesudah Grid Search)</h6>
+          <div style="overflow-x:auto;"><table id="tblThesisCM" class="thesis-table"></table></div>
+
+          <div style="margin-top:.8rem; text-align:right;">
+            <button onclick="copyThesisTables()"
+              style="padding:.45rem .9rem; background:#34495e; color:#fff; border:none; border-radius:6px; font-size:.78rem; font-weight:600; cursor:pointer;">
+              📋 Salin Semua Tabel (TSV untuk Word/Excel)
+            </button>
+          </div>
+        </div>
+
+        <!-- Full tables -->
+        <details style="margin-top:.8rem;">
+          <summary style="cursor:pointer; font-size:.82rem; color:#2980b9; font-weight:600;">📋 Lihat tabel hasil lengkap</summary>
+          <div id="gridTables" style="margin-top:.6rem;"></div>
+        </details>
+      </div>
+    </div>
+
+    <!-- Placeholder awal -->
+    <div id="placeholder" class="result-placeholder" style="display:none;">
+      <div class="icon">⚙️</div>
+      <div style="font-weight:600; font-size:1rem; margin-bottom:4px;">Atur parameter lalu klik Jalankan</div>
+      <div style="font-size:0.85rem; color:#e74c3c; font-weight:600;">⚠️ Hasil tuning akan otomatis disimpan dan memperbarui model yang ada!</div>
+    </div>
+
+    <!-- Loading baseline -->
+    <div id="baselineLoading" class="result-placeholder">
+      <div class="icon">⏳</div>
+      <div style="font-weight:600; font-size:1rem;">Memuat data model saat ini…</div>
+    </div>
+
+    <!-- Hasil utama (tersembunyi sampai ada data) -->
+    <div id="resultSection" style="display:none; flex-direction:column; gap:1.2rem;">
+
+      <!-- Metric Cards -->
+      <div class="metric-cards">
+        <div class="mc mc-if">
+          <div class="algo">Isolation Forest</div>
+          <div class="count" id="res_if_n">—</div>
+          <div class="pct"   id="res_if_pct">—</div>
+          <div class="delta" id="res_if_delta">—</div>
+        </div>
+        <div class="mc mc-lof">
+          <div class="algo">LOF</div>
+          <div class="count" id="res_lof_n">—</div>
+          <div class="pct"   id="res_lof_pct">—</div>
+          <div class="delta" id="res_lof_delta">—</div>
+        </div>
+        <div class="mc mc-ecod">
+          <div class="algo">ECOD</div>
+          <div class="count" id="res_ecod_n">—</div>
+          <div class="pct"   id="res_ecod_pct">—</div>
+          <div class="delta" id="res_ecod_delta">—</div>
+        </div>
+        <div class="mc mc-ens">
+          <div class="algo">Ensemble Final</div>
+          <div class="count" id="res_ens_n">—</div>
+          <div class="pct"   id="res_ens_pct">—</div>
+          <div class="delta" id="res_ens_delta">—</div>
+        </div>
+      </div>
+
+      <!-- Vote Distribution -->
+      <div class="section-card">
+        <h4>🗳️ Distribusi Vote
+          <span class="info-tip" data-tip="Menunjukkan berapa banyak algoritma (dari 3: Isolation Forest, LOF, ECOD) yang sepakat mendeteksi anomali pada setiap rekaman.&#10;&#10;• Vote 3 = ketiga algoritma sepakat → anomali sangat kuat&#10;• Vote 2 = dua algoritma sepakat → terdeteksi sebagai anomali&#10;• Vote 1 = hanya satu yang mendeteksi → dianggap normal&#10;• Vote 0 = tidak ada yang mendeteksi → normal">?</span>
+        </h4>
+        <div id="voteBars"></div>
+      </div>
+
+      <!-- Agreement Matrix -->
+      <div class="section-card">
+        <h4>🤝 Agreement Antar Algoritma
+          <span class="info-tip" data-tip="Mengukur seberapa sering dua algoritma sama-sama mendeteksi rekaman yang sama sebagai anomali.&#10;&#10;• Agreement tinggi = kedua algoritma saling mengkonfirmasi, hasil lebih bisa dipercaya&#10;• Agreement rendah = masing-masing mendeteksi jenis anomali yang berbeda&#10;&#10;Contoh: 'IF ∩ LOF = 2.500' artinya ada 2.500 rekaman yang dianggap anomali oleh Isolation Forest DAN LOF secara bersamaan.">?</span>
+        </h4>
+        <div class="agree-grid" id="agreeGrid"></div>
+      </div>
+
+      <!-- Charts -->
+      <div class="section-card">
+        <h4>📊 Perbandingan Jumlah Anomali</h4>
+        <div id="chartComparison" style="height:280px;"></div>
+      </div>
+
+      <!-- Metrics Evaluasi -->
+      <div class="section-card" id="metricsSection" style="display:none;">
+        <h4>📈 Metrik Evaluasi Model</h4>
+      </div>
+
+    </div>
+
+    <!-- Riwayat Run -->
+    <div class="section-card" id="historySection" style="display:none;">
+      <h4>📋 Riwayat Percobaan <span style="font-weight:400;color:#95a5a6;font-size:0.8rem;">(sesi ini)</span></h4>
+      <div style="overflow-x:auto;">
+        <table class="history-table">
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>IF estim.</th><th>IF cont.</th>
+              <th>LOF k</th><th>LOF cont.</th>
+              <th>ECOD cont.</th><th>Min Votes</th>
+              <th>IF</th><th>LOF</th><th>ECOD</th><th>Ensemble</th>
+            </tr>
+          </thead>
+          <tbody id="historyBody"></tbody>
+        </table>
+      </div>
+    </div>
+
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let runHistory = [];
+let runCount   = 0;
+
+// ═══ LOAD BASELINE ON PAGE LOAD ═══
+document.addEventListener("DOMContentLoaded", function() {
+    loadBaseline();
+    loadLatestGridSearch();
+    checkGridCheckpoint();
+});
+
+function loadBaseline() {
+    fetch("/api/tuning/baseline")
+      .then(r => r.json())
+      .then(d => {
+        document.getElementById("baselineLoading").style.display = "none";
+        if (!d.ok) {
+            document.getElementById("placeholder").style.display = "block";
+            return;
+        }
+        renderBaseline(d);
+      })
+      .catch(err => {
+        document.getElementById("baselineLoading").style.display = "none";
+        document.getElementById("placeholder").style.display = "block";
+      });
+}
+
+function renderBaseline(d) {
+    document.getElementById("resultSection").style.display = "flex";
+
+    const r = d.results;
+    const n = d.n_total;
+
+    // Metric Cards — tampilkan sebagai "Model Saat Ini"
+    document.getElementById("res_if_n").textContent   = r.if.n.toLocaleString();
+    document.getElementById("res_if_pct").textContent  = r.if.pct + "% dari " + n.toLocaleString();
+    document.getElementById("res_if_delta").innerHTML  = `<span class="delta-eq">📌 Model saat ini (baseline)</span>`;
+
+    document.getElementById("res_lof_n").textContent   = r.lof.n.toLocaleString();
+    document.getElementById("res_lof_pct").textContent  = r.lof.pct + "%";
+    document.getElementById("res_lof_delta").innerHTML  = `<span class="delta-eq">📌 Model saat ini (baseline)</span>`;
+
+    document.getElementById("res_ecod_n").textContent   = r.ecod.n.toLocaleString();
+    document.getElementById("res_ecod_pct").textContent  = r.ecod.pct + "%";
+    document.getElementById("res_ecod_delta").innerHTML  = `<span class="delta-eq">📌 Model saat ini (baseline)</span>`;
+
+    document.getElementById("res_ens_n").textContent   = r.ensemble.n.toLocaleString();
+    document.getElementById("res_ens_pct").textContent  = r.ensemble.pct + "%";
+    document.getElementById("res_ens_delta").innerHTML  = `<span class="delta-eq">📌 Model saat ini (baseline)</span>`;
+
+    // Vote Bars
+    const vd = d.vote_dist;
+    const voteDef = [
+        { lbl: "Vote 3 (semua setuju)", n: vd.vote_3, color: "#8e44ad" },
+        { lbl: "Vote 2 (2 setuju)",     n: vd.vote_2, color: "#e74c3c" },
+        { lbl: "Vote 1 (1 setuju)",     n: vd.vote_1, color: "#f39c12" },
+        { lbl: "Vote 0 (normal)",       n: vd.vote_0, color: "#27ae60" },
+    ];
+    const maxVote = Math.max(...voteDef.map(x => x.n));
+    document.getElementById("voteBars").innerHTML = voteDef.map(v => `
+        <div class="vote-bar">
+          <div class="lbl">${v.lbl}</div>
+          <div class="bar-wrap">
+            <div class="bar-fill" style="width:${maxVote>0?(v.n/maxVote*100):0}%; background:${v.color};"></div>
+          </div>
+          <div class="cnt">${v.n.toLocaleString()} (${(v.n/n*100).toFixed(1)}%)</div>
+        </div>`).join("");
+
+    // Agreement Grid
+    const ag = d.agreement;
+    document.getElementById("agreeGrid").innerHTML = [
+        {lbl: "IF ∩ LOF",  ...ag.if_lof},
+        {lbl: "IF ∩ ECOD", ...ag.if_ecod},
+        {lbl: "LOF ∩ ECOD",...ag.lof_ecod},
+        {lbl: "Ketiganya", ...ag.all_three},
+    ].map(x => `
+        <div class="agree-item">
+          <span class="pair">${x.lbl}</span>
+          <span class="val">${x.n.toLocaleString()} <small style="color:#95a5a6;">(${x.pct}%)</small></span>
+        </div>`).join("");
+
+    // Chart — baseline only (single bar)
+    const cats = ["Isolation Forest", "LOF", "ECOD", "Ensemble"];
+    const vals = [r.if.n, r.lof.n, r.ecod.n, r.ensemble.n];
+    Plotly.newPlot("chartComparison", [
+        { name: "Model Saat Ini (Baseline)", x: cats, y: vals, type: "bar",
+          marker: {color: ["#2980b9","#27ae60","#d35400","#8e44ad"]},
+          text: vals.map(v => v.toLocaleString()),
+          textposition: "outside" },
+    ], {
+        margin: {t: 10, b: 40, l: 50, r: 10},
+        legend: {orientation: "h", y: -0.2},
+        yaxis: {title: "Jumlah Anomali"},
+        plot_bgcolor: "#fafafa"
+    }, {responsive: true, displayModeBar: false});
+
+    // Metrics table (jika ada dari results.pkl)
+    if (d.metrics) {
+        renderMetricsTable(d.metrics);
+    }
+}
+
+function renderMetricsTable(metrics) {
+    // Tambahkan tabel metrik evaluasi di bawah chart
+    const section = document.getElementById("metricsSection");
+    if (!section) return;
+    const algos = Object.keys(metrics);
+    if (!algos.length) return;
+
+    let html = `<table class="history-table">
+      <thead><tr><th>Algoritma</th><th>Precision</th><th>Recall</th><th>F1-Score</th><th>AUC-PR</th></tr></thead><tbody>`;
+    algos.forEach(alg => {
+        const m = metrics[alg];
+        html += `<tr>
+          <td style="font-weight:600;">${alg}</td>
+          <td>${m.precision}</td>
+          <td>${m.recall}</td>
+          <td style="font-weight:700;color:#2980b9;">${m.f1}</td>
+          <td>${m.auc}</td>
+        </tr>`;
+    });
+    html += `</tbody></table>`;
+    section.innerHTML = html;
+    section.style.display = "block";
+}
+
+function runTuning() {
+    const btn = document.getElementById("runBtn");
+    btn.disabled = true;
+    btn.textContent = "⏳ Memproses...";
+    document.getElementById("errorBox").style.display = "none";
+
+    const params = {
+        if_n_estimators:    parseInt(document.getElementById("if_n_estimators").value),
+        if_contamination:   parseFloat(document.getElementById("if_contamination").value),
+        if_max_samples:     document.getElementById("if_max_samples").value,
+        lof_n_neighbors:    parseInt(document.getElementById("lof_n_neighbors").value),
+        lof_contamination:  parseFloat(document.getElementById("lof_contamination").value),
+        lof_metric:         document.getElementById("lof_metric").value,
+        ecod_contamination: parseFloat(document.getElementById("ecod_contamination").value),
+        ensemble_min_votes: parseInt(document.getElementById("ensemble_min_votes").value),
+    };
+
+    fetch("/api/tuning", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify(params)
+    })
+    .then(r => r.json())
+    .then(d => {
+        btn.disabled = false;
+        btn.textContent = "▶ Jalankan Tuning";
+        if (!d.ok) {
+            const eb = document.getElementById("errorBox");
+            eb.style.display = "block";
+            eb.textContent = "❌ " + d.error;
+            return;
+        }
+        renderResults(d, params);
+    })
+    .catch(err => {
+        btn.disabled = false;
+        btn.textContent = "▶ Jalankan Tuning";
+        const eb = document.getElementById("errorBox");
+        eb.style.display = "block";
+        eb.textContent = "❌ Request error: " + err;
+    });
+}
+
+function delta(cur, prev) {
+    if (prev === null || prev === undefined) return `<span class="delta-eq">— (baseline)</span>`;
+    const diff = cur - prev;
+    if (diff === 0) return `<span class="delta-eq">= sama dengan baseline</span>`;
+    const sign  = diff > 0 ? "▲" : "▼";
+    const cls   = diff > 0 ? "delta-up" : "delta-dn";
+    return `<span class="${cls}">${sign} ${Math.abs(diff)} vs baseline</span>`;
+}
+
+function renderResults(d, params) {
+    document.getElementById("placeholder").style.display = "none";
+    document.getElementById("baselineLoading").style.display = "none";
+    document.getElementById("resultSection").style.display = "flex";
+
+    const r = d.results;
+    const n = d.n_total;
+
+    // Metric Cards
+    document.getElementById("res_if_n").textContent   = r.if.n.toLocaleString();
+    document.getElementById("res_if_pct").textContent  = r.if.pct + "% dari " + n.toLocaleString();
+    document.getElementById("res_if_delta").innerHTML  = delta(r.if.n, r.if.prev);
+
+    document.getElementById("res_lof_n").textContent   = r.lof.n.toLocaleString();
+    document.getElementById("res_lof_pct").textContent  = r.lof.pct + "%";
+    document.getElementById("res_lof_delta").innerHTML  = delta(r.lof.n, r.lof.prev);
+
+    document.getElementById("res_ecod_n").textContent   = r.ecod.n.toLocaleString();
+    document.getElementById("res_ecod_pct").textContent  = r.ecod.pct + "%";
+    document.getElementById("res_ecod_delta").innerHTML  = delta(r.ecod.n, r.ecod.prev);
+
+    document.getElementById("res_ens_n").textContent   = r.ensemble.n.toLocaleString();
+    document.getElementById("res_ens_pct").textContent  = r.ensemble.pct + "% (≥" + r.ensemble.min_votes + " vote)";
+    document.getElementById("res_ens_delta").innerHTML  = delta(r.ensemble.n, r.ensemble.prev);
+
+    // Vote Bars
+    const vd = d.vote_dist;
+    const voteDef = [
+        { lbl: "Vote 3 (semua setuju)", n: vd.vote_3, color: "#8e44ad" },
+        { lbl: "Vote 2 (2 setuju)",     n: vd.vote_2, color: "#2980b9" },
+        { lbl: "Vote 1 (1 setuju)",     n: vd.vote_1, color: "#f39c12" },
+        { lbl: "Vote 0 (normal)",       n: vd.vote_0, color: "#27ae60" },
+    ];
+    const maxVote = Math.max(...voteDef.map(x => x.n));
+    document.getElementById("voteBars").innerHTML = voteDef.map(v => `
+        <div class="vote-bar">
+          <div class="lbl">${v.lbl}</div>
+          <div class="bar-wrap">
+            <div class="bar-fill" style="width:${maxVote>0?(v.n/maxVote*100):0}%; background:${v.color};"></div>
+          </div>
+          <div class="cnt">${v.n.toLocaleString()} (${(v.n/n*100).toFixed(1)}%)</div>
+        </div>`).join("");
+
+    // Agreement Grid
+    const ag = d.agreement;
+    document.getElementById("agreeGrid").innerHTML = [
+        {lbl: "IF ∩ LOF",  ...ag.if_lof},
+        {lbl: "IF ∩ ECOD", ...ag.if_ecod},
+        {lbl: "LOF ∩ ECOD",...ag.lof_ecod},
+        {lbl: "Ketiganya", ...ag.all_three},
+    ].map(x => `
+        <div class="agree-item">
+          <span class="pair">${x.lbl}</span>
+          <span class="val">${x.n.toLocaleString()} <small style="color:#95a5a6;">(${x.pct}%)</small></span>
+        </div>`).join("");
+
+    // Chart Comparison Bar
+    const prev_labels = ["IF (baseline)", "LOF (baseline)", "ECOD (baseline)", "Ens (baseline)"];
+    const new_labels  = ["IF (tuning)",   "LOF (tuning)",   "ECOD (tuning)",   "Ens (tuning)"];
+    const prev_vals = [r.if.prev, r.lof.prev, r.ecod.prev, r.ensemble.prev].map(v => v ?? 0);
+    const new_vals  = [r.if.n,   r.lof.n,    r.ecod.n,    r.ensemble.n];
+    const cats = ["Isolation Forest", "LOF", "ECOD", "Ensemble"];
+
+    Plotly.newPlot("chartComparison", [
+        { name: "Baseline (tersimpan)", x: cats, y: prev_vals, type: "bar", marker: {color: "rgba(189,189,189,0.8)"} },
+        { name: "Parameter Baru",       x: cats, y: new_vals,  type: "bar", marker: {color: ["#2980b9","#27ae60","#d35400","#8e44ad"]} },
+    ], {
+        barmode: "group",
+        margin: {t: 10, b: 40, l: 50, r: 10},
+        legend: {orientation: "h", y: -0.2},
+        yaxis: {title: "Jumlah Anomali"},
+        plot_bgcolor: "#fafafa"
+    }, {responsive: true, displayModeBar: false});
+
+    // History
+    runCount++;
+    runHistory.unshift({run: runCount, params, results: r});
+    renderHistory();
+}
+
+function renderHistory() {
+    const section = document.getElementById("historySection");
+    section.style.display = "block";
+    document.getElementById("historyBody").innerHTML = runHistory.slice(0,10).map(h => `
+        <tr>
+          <td><span class="badge-run">#${h.run}</span></td>
+          <td>${h.params.if_n_estimators}</td>
+          <td>${h.params.if_contamination.toFixed(2)}</td>
+          <td>${h.params.lof_n_neighbors}</td>
+          <td>${h.params.lof_contamination.toFixed(2)}</td>
+          <td>${h.params.ecod_contamination.toFixed(2)}</td>
+          <td>${h.params.ensemble_min_votes}</td>
+          <td style="color:#2980b9;font-weight:600;">${h.results.if.n.toLocaleString()} (${h.results.if.pct}%)</td>
+          <td style="color:#27ae60;font-weight:600;">${h.results.lof.n.toLocaleString()} (${h.results.lof.pct}%)</td>
+          <td style="color:#d35400;font-weight:600;">${h.results.ecod.n.toLocaleString()} (${h.results.ecod.pct}%)</td>
+          <td style="color:#8e44ad;font-weight:700;">${h.results.ensemble.n.toLocaleString()} (${h.results.ensemble.pct}%)</td>
+        </tr>`).join("");
+}
+
+// ════════════════════════════════════════════════════════════
+//  GRID SEARCH
+// ════════════════════════════════════════════════════════════
+
+let LAST_GRID = null;
+let GRID_PROGRESS_TIMER = null;
+let CURRENT_GRID_RUN_ID = null;
+let LAST_GRID_PROGRESS = null;
+let GRID_CHECKPOINT = null;
+
+function parseList(str, parser) {
+    return str.split(",").map(s => parser(s.trim())).filter(v => !isNaN(v));
+}
+
+function parseStrList(str) {
+    return str.split(",").map(s => s.trim().toLowerCase()).filter(Boolean);
+}
+
+function loadLatestGridSearch() {
+    fetch("/api/tuning/gridsearch/latest")
+      .then(r => r.json())
+      .then(d => {
+        if (d.ok) renderGridResults(d);
+      })
+      .catch(() => {});
+}
+
+function gridConfigFromInputs() {
+    return {
+        if_contamination_list:   parseList(document.getElementById("grid_if_cont").value,   parseFloat),
+        if_n_estimators_list:    parseList(document.getElementById("grid_if_nest").value,   parseInt),
+        lof_contamination_list:  parseList(document.getElementById("grid_lof_cont").value,  parseFloat),
+        lof_n_neighbors_list:    parseList(document.getElementById("grid_lof_nnb").value,   parseInt),
+        lof_metric_list:         parseStrList(document.getElementById("grid_lof_metric").value),
+        ecod_contamination_list: parseList(document.getElementById("grid_ecod_cont").value, parseFloat),
+    };
+}
+
+function applyGridConfigToInputs(grid) {
+    if (!grid) return;
+    const setVal = (id, values) => {
+        if (values && values.length) document.getElementById(id).value = values.join(", ");
+    };
+    setVal("grid_if_cont", grid.if_contamination_list);
+    setVal("grid_if_nest", grid.if_n_estimators_list);
+    setVal("grid_lof_cont", grid.lof_contamination_list);
+    setVal("grid_lof_nnb", grid.lof_n_neighbors_list);
+    setVal("grid_lof_metric", grid.lof_metric_list);
+    setVal("grid_ecod_cont", grid.ecod_contamination_list);
+}
+
+function checkGridCheckpoint() {
+    fetch("/api/tuning/gridsearch/checkpoint", {cache: "no-store"})
+      .then(r => r.json())
+      .then(d => {
+          const notice = document.getElementById("gridCheckpointNotice");
+          const resumeBtn = document.getElementById("resumeGridBtn");
+          if (!d.ok || !d.resumable) {
+              GRID_CHECKPOINT = null;
+              notice.style.display = "none";
+              resumeBtn.style.display = "none";
+              return;
+          }
+          GRID_CHECKPOINT = d;
+          const updated = d.updated_at ? new Date(d.updated_at * 1000).toLocaleString("id-ID") : "-";
+          notice.innerHTML = `
+            <strong>Checkpoint grid search ditemukan.</strong>
+            Sudah selesai ${d.done_steps.toLocaleString()} dari ${d.total_steps.toLocaleString()} langkah (${d.percent}%).
+            IF ${d.done_if}, LOF ${d.done_lof}, ECOD ${d.done_ecod}. Terakhir: ${updated}.
+            Klik <strong>Lanjutkan Grid Search</strong> untuk meneruskan dari checkpoint.
+          `;
+          notice.style.display = "block";
+          resumeBtn.style.display = "inline-block";
+      })
+      .catch(() => {});
+}
+
+function setGridProgressUI(p) {
+    p = {...(LAST_GRID_PROGRESS || {}), ...p};
+    LAST_GRID_PROGRESS = p;
+    const percent = Math.max(0, Math.min(100, Number(p.percent || 0)));
+    const title = document.getElementById("gridProgressTitle");
+    const pct = document.getElementById("gridProgressPercent");
+    const bar = document.getElementById("gridProgressBar");
+    const text = document.getElementById("gridProgressText");
+    const meta = document.getElementById("gridProgressMeta");
+    const btn = document.getElementById("gridBtn");
+
+    title.textContent = p.phase || "Grid Search";
+    pct.textContent = percent.toFixed(percent % 1 === 0 ? 0 : 1) + "%";
+    bar.style.width = percent + "%";
+    text.textContent = p.message || "Memproses grid search...";
+
+    const current = Number(p.current || 0);
+    const total = Number(p.total || 0);
+    const elapsed = Number(p.elapsed_seconds || 0);
+    const elapsedText = elapsed ? ` | berjalan ${elapsed.toFixed(1)} detik` : "";
+    meta.textContent = total ? `Langkah ${current.toLocaleString()} dari ${total.toLocaleString()}${elapsedText}` : elapsedText.replace(" | ", "");
+
+    if (p.status === "failed") {
+        pct.style.color = "#c0392b";
+        bar.style.background = "#e74c3c";
+    } else if (p.status === "complete" || percent >= 100) {
+        pct.style.color = "#1e8449";
+        bar.style.background = "#27ae60";
+    } else {
+        pct.style.color = "#d35400";
+        bar.style.background = "linear-gradient(90deg,#f39c12,#27ae60)";
+    }
+
+    if (btn && p.status === "running") {
+        btn.textContent = `Memproses ${Math.floor(percent)}%`;
+    }
+}
+
+function stopGridProgressPolling(finalProgress) {
+    if (GRID_PROGRESS_TIMER) {
+        clearInterval(GRID_PROGRESS_TIMER);
+        GRID_PROGRESS_TIMER = null;
+    }
+    if (finalProgress) setGridProgressUI(finalProgress);
+}
+
+function startGridProgressPolling(runId) {
+    stopGridProgressPolling();
+    LAST_GRID_PROGRESS = null;
+    setGridProgressUI({
+        phase: "Persiapan",
+        message: "Mengirim request grid search ke server...",
+        percent: 0,
+        current: 0,
+        total: 0,
+        status: "running"
+    });
+    GRID_PROGRESS_TIMER = setInterval(() => {
+        fetch("/api/tuning/gridsearch/progress", {cache: "no-store"})
+          .then(r => r.json())
+          .then(p => {
+              if (!p.ok) return;
+              if (p.run_id && runId && p.run_id !== runId) return;
+              setGridProgressUI(p);
+              if (p.status === "complete" || p.status === "failed") {
+                  stopGridProgressPolling();
+              }
+          })
+          .catch(() => {});
+    }, 1000);
+}
+
+function runGridSearch(resume=false) {
+    const btn = document.getElementById("gridBtn");
+    const resumeBtn = document.getElementById("resumeGridBtn");
+    btn.disabled = true;
+    resumeBtn.disabled = true;
+    btn.textContent = "⏳ Memproses...";
+    document.getElementById("gridProgress").style.display = "block";
+    document.getElementById("gridResults").style.display = "none";
+    if (!resume) {
+        document.getElementById("gridCheckpointNotice").style.display = "none";
+        resumeBtn.style.display = "none";
+        GRID_CHECKPOINT = null;
+    }
+    CURRENT_GRID_RUN_ID = "grid-" + Date.now();
+    const gridBody = (resume && GRID_CHECKPOINT && GRID_CHECKPOINT.grid)
+        ? GRID_CHECKPOINT.grid
+        : gridConfigFromInputs();
+    if (resume && GRID_CHECKPOINT && GRID_CHECKPOINT.grid) {
+        applyGridConfigToInputs(GRID_CHECKPOINT.grid);
+    }
+
+    const body = {
+        run_id:                   CURRENT_GRID_RUN_ID,
+        resume:                  !!resume,
+        if_contamination_list:   gridBody.if_contamination_list,
+        if_n_estimators_list:    gridBody.if_n_estimators_list,
+        lof_contamination_list:  gridBody.lof_contamination_list,
+        lof_n_neighbors_list:    gridBody.lof_n_neighbors_list,
+        lof_metric_list:         gridBody.lof_metric_list,
+        ecod_contamination_list: gridBody.ecod_contamination_list,
+    };
+    startGridProgressPolling(CURRENT_GRID_RUN_ID);
+
+    fetch("/api/tuning/gridsearch", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify(body)
+    })
+    .then(r => r.json())
+    .then(d => {
+        btn.disabled = false;
+        resumeBtn.disabled = false;
+        btn.textContent = "▶ Jalankan Grid Search";
+        if (!d.ok) {
+            stopGridProgressPolling({
+                status: "failed",
+                phase: "Gagal",
+                message: "Grid Search gagal: " + d.error,
+                percent: 0
+            });
+            const eb = document.getElementById("errorBox");
+            eb.style.display = "block";
+            eb.textContent = "❌ Grid Search gagal: " + d.error;
+            return;
+        }
+        stopGridProgressPolling({
+            status: "complete",
+            phase: "Selesai",
+            message: "Grid search selesai. Hasil terbaik sudah ditampilkan.",
+            percent: 100
+        });
+        document.getElementById("gridCheckpointNotice").style.display = "none";
+        resumeBtn.style.display = "none";
+        GRID_CHECKPOINT = null;
+        renderGridResults(d);
+    })
+    .catch(err => {
+        btn.disabled = false;
+        resumeBtn.disabled = false;
+        btn.textContent = "▶ Jalankan Grid Search";
+        stopGridProgressPolling({
+            status: "failed",
+            phase: "Request Error",
+            message: "Request error: " + err,
+            percent: 0
+        });
+        const eb = document.getElementById("errorBox");
+        eb.style.display = "block";
+        eb.textContent = "❌ Request error: " + err;
+    });
+}
+
+function renderGridResults(d) {
+    LAST_GRID = d;
+    document.getElementById("gridResults").style.display = "block";
+
+    // Metadata
+    document.getElementById("gridMeta").innerHTML =
+        `📅 Grid terakhir: <strong>${d.timestamp}</strong> • ${d.n_samples.toLocaleString()} sampel • ${d.n_anomali_true.toLocaleString()} anomali (label_pseudo)`;
+
+    // Best params
+    document.getElementById("bestIf").innerHTML = `
+        contamination: <strong>${d.best_if.contamination}</strong><br>
+        n_estimators: <strong>${d.best_if.n_estimators}</strong><br>
+        F1: <strong style="color:#2980b9;">${d.best_if.f1.toFixed(4)}</strong> | AUC-PR: <strong>${d.best_if.auc}</strong><br>
+        P=${d.best_if.precision} | R=${d.best_if.recall}`;
+    document.getElementById("bestLof").innerHTML = `
+        contamination: <strong>${d.best_lof.contamination}</strong><br>
+        n_neighbors: <strong>${d.best_lof.n_neighbors}</strong><br>
+        metric: <strong>${d.best_lof.metric || "minkowski"}</strong><br>
+        F1: <strong style="color:#27ae60;">${d.best_lof.f1.toFixed(4)}</strong> | AUC-PR: <strong>${d.best_lof.auc}</strong><br>
+        P=${d.best_lof.precision} | R=${d.best_lof.recall}`;
+    document.getElementById("bestEcod").innerHTML = `
+        contamination: <strong>${d.best_ecod.contamination}</strong><br>
+        F1: <strong style="color:#d35400;">${d.best_ecod.f1.toFixed(4)}</strong> | AUC-PR: <strong>${d.best_ecod.auc}</strong><br>
+        P=${d.best_ecod.precision} | R=${d.best_ecod.recall}`;
+
+    renderGridIF(d);
+    renderGridLOF(d);
+    renderGridECOD(d);
+    renderGridBest(d);
+    renderEnsembleThreshold(d);
+    renderScoreDist(d);
+    renderDefaultVsBest(d);
+    renderThesisTables(d);
+    renderGridTables(d);
+}
+
+function renderGridIF(d) {
+    // Group by n_estimators — satu line per n_est
+    const byNest = {};
+    d.results_if.forEach(r => {
+        if (!byNest[r.n_estimators]) byNest[r.n_estimators] = [];
+        byNest[r.n_estimators].push(r);
+    });
+    const traces = Object.keys(byNest).map(nest => {
+        const sorted = byNest[nest].sort((a,b) => a.contamination - b.contamination);
+        return {
+            type: "scatter", mode: "lines+markers",
+            name: `n_est=${nest}`,
+            x: sorted.map(r => r.contamination),
+            y: sorted.map(r => r.f1),
+            line: {width: 2}, marker: {size: 7}
+        };
+    });
+    // Tandai titik terbaik
+    traces.push({
+        type: "scatter", mode: "markers",
+        name: "Terbaik",
+        x: [d.best_if.contamination],
+        y: [d.best_if.f1],
+        marker: {size: 14, color: "#e74c3c", symbol: "star"},
+        hovertemplate: "Terbaik: F1=%{y:.4f}<extra></extra>"
+    });
+    Plotly.newPlot("chartGridIF", traces, {
+        margin: {t: 10, b: 40, l: 50, r: 10},
+        xaxis: {title: "Contamination"},
+        yaxis: {title: "F1 Score", range: [0, 1.05]},
+        legend: {orientation: "h", y: -0.2},
+        plot_bgcolor: "#fafafa"
+    }, {responsive: true, displayModeBar: false});
+}
+
+function renderGridLOF(d) {
+    // Heatmap: n_neighbors (y) x contamination (x) -> F1, untuk metric terbaik.
+    // Normalize types to avoid float/int mismatch
+    const bestMetric = d.best_lof.metric || "minkowski";
+    const metricRows = d.results_lof.filter(r => (r.metric || "minkowski") === bestMetric);
+    const sourceRows = metricRows.length ? metricRows : d.results_lof;
+    const results = sourceRows.map(r => ({
+        ...r,
+        n_neighbors: Math.round(r.n_neighbors),
+        contamination: parseFloat(r.contamination.toFixed(4))
+    }));
+    const nnb  = [...new Set(results.map(r => r.n_neighbors))].sort((a,b) => a-b);
+    const cont = [...new Set(results.map(r => r.contamination))].sort((a,b) => a-b);
+    const z = nnb.map(n => cont.map(c => {
+        const row = results.find(r => r.n_neighbors === n && Math.abs(r.contamination - c) < 0.0001);
+        return row ? row.f1 : null;
+    }));
+    const texts = nnb.map(n => cont.map(c => {
+        const row = results.find(r => r.n_neighbors === n && Math.abs(r.contamination - c) < 0.0001);
+        return row ? row.f1.toFixed(3) : "";
+    }));
+
+    const best_x_idx = cont.findIndex(c => Math.abs(c - d.best_lof.contamination) < 0.0001);
+    const best_y_idx = nnb.findIndex(n => n === Math.round(d.best_lof.n_neighbors));
+    const bestShape = (best_x_idx >= 0 && best_y_idx >= 0) ? [{
+        type: 'rect',
+        x0: best_x_idx - 0.5,
+        x1: best_x_idx + 0.5,
+        y0: best_y_idx - 0.5,
+        y1: best_y_idx + 0.5,
+        line: {
+            color: '#27ae60',
+            width: 3
+        },
+        fillcolor: 'transparent'
+    }] : [];
+
+    Plotly.newPlot("chartGridLOF", [{
+        type: "heatmap",
+        z: z,
+        x: cont.map(v => v.toString() + "\u200B"),
+        y: nnb.map(v => v.toString() + "\u200B"),
+        colorscale: "Blues",
+        text: texts,
+        texttemplate: "%{text}",
+        textfont: {size: 9},
+        hovertemplate: "metric=" + bestMetric + "<br>n_neighbors=%{y}<br>contamination=%{x}<br>F1=%{z:.4f}<extra></extra>",
+        colorbar: {title: "F1", thickness: 12}
+    }], {
+        title: {text: "Metric: " + bestMetric, font: {size: 12}},
+        margin: {t: 35, b: 50, l: 70, r: 40},
+        xaxis: {title: "Contamination", type: "category"},
+        yaxis: {title: "n_neighbors", type: "category"},
+        height: 380,
+        plot_bgcolor: "#fafafa",
+        shapes: bestShape
+    }, {responsive: true, displayModeBar: false});
+}
+
+function renderGridECOD(d) {
+    const sorted = [...d.results_ecod].sort((a,b) => a.contamination - b.contamination);
+    const colors = sorted.map(r => r.contamination === d.best_ecod.contamination ? "#e74c3c" : "#d35400");
+    Plotly.newPlot("chartGridECOD", [{
+        type: "bar",
+        x: sorted.map(r => r.contamination.toString()),
+        y: sorted.map(r => r.f1),
+        marker: {color: colors},
+        text: sorted.map(r => r.f1.toFixed(3)),
+        textposition: "outside",
+        hovertemplate: "contamination=%{x}<br>F1=%{y:.4f}<extra></extra>"
+    }], {
+        margin: {t: 20, b: 40, l: 50, r: 10},
+        xaxis: {title: "Contamination"},
+        yaxis: {title: "F1 Score", range: [0, 1.1]},
+        plot_bgcolor: "#fafafa"
+    }, {responsive: true, displayModeBar: false});
+}
+
+function renderGridBest(d) {
+    const metrics = ["precision", "recall", "f1"];
+    const labels  = ["Precision", "Recall", "F1 Score"];
+    const algos = [
+        {name: "IF",   r: d.best_if,   color: "#2980b9"},
+        {name: "LOF",  r: d.best_lof,  color: "#27ae60"},
+        {name: "ECOD", r: d.best_ecod, color: "#d35400"},
+    ];
+    const traces = algos.map(a => ({
+        type: "bar",
+        name: a.name,
+        x: labels,
+        y: metrics.map(m => a.r[m]),
+        marker: {color: a.color},
+        text: metrics.map(m => a.r[m].toFixed(3)),
+        textposition: "outside"
+    }));
+    Plotly.newPlot("chartGridBest", traces, {
+        barmode: "group",
+        margin: {t: 20, b: 40, l: 50, r: 10},
+        yaxis: {title: "Skor (0–1)", range: [0, 1.15]},
+        legend: {orientation: "h", y: -0.2},
+        plot_bgcolor: "#fafafa"
+    }, {responsive: true, displayModeBar: false});
+}
+
+function renderGridTables(d) {
+    const mkTable = (rows, cols, bestRow) => {
+        const thead = `<tr>${cols.map(c => `<th>${c}</th>`).join("")}</tr>`;
+        const tbody = [...rows].sort((a,b) => b.f1 - a.f1).map(r => {
+            const isBest = cols.every(c => r[c] === bestRow[c]);
+            const style = isBest ? 'style="background:#fff3cd;font-weight:700;"' : '';
+            return `<tr ${style}>${cols.map(c => {
+                const value = r[c];
+                return `<td>${value === undefined || value === null ? "-" : value}</td>`;
+            }).join("")}</tr>`;
+        }).join("");
+        return `<table class="history-table"><thead>${thead}</thead><tbody>${tbody}</tbody></table>`;
+    };
+
+    const ifCols   = ["n_estimators", "contamination", "f1", "precision", "recall", "auc", "n_anomali"];
+    const lofCols  = ["metric", "n_neighbors", "contamination", "f1", "precision", "recall", "auc", "n_anomali"];
+    const ecodCols = ["contamination", "f1", "precision", "recall", "auc", "n_anomali"];
+
+    document.getElementById("gridTables").innerHTML = `
+        <h5 style="font-size:.8rem; margin:.6rem 0 .3rem; color:#2980b9;">🌲 IF (${d.results_if.length} kombinasi)</h5>
+        <div style="overflow-x:auto;">${mkTable(d.results_if, ifCols, d.best_if)}</div>
+
+        <h5 style="font-size:.8rem; margin:.6rem 0 .3rem; color:#27ae60;">📍 LOF (${d.results_lof.length} kombinasi)</h5>
+        <div style="overflow-x:auto;">${mkTable(d.results_lof, lofCols, d.best_lof)}</div>
+
+        <h5 style="font-size:.8rem; margin:.6rem 0 .3rem; color:#d35400;">📈 ECOD (${d.results_ecod.length} kombinasi)</h5>
+        <div style="overflow-x:auto;">${mkTable(d.results_ecod, ecodCols, d.best_ecod)}</div>
+
+        ${d.ensemble_results ? `<h5 style="font-size:.8rem; margin:.6rem 0 .3rem; color:#8e44ad;">🔗 Ensemble Threshold</h5>
+        <div style="overflow-x:auto;">
+          <table class="history-table">
+            <thead><tr><th>Min Votes</th><th>Anomali</th><th>%</th><th>F1</th><th>Precision</th><th>Recall</th><th>AUC-PR</th></tr></thead>
+            <tbody>${d.ensemble_results.map(r => {
+              const isBest = r.min_votes === d.best_ensemble.min_votes;
+              const style = isBest ? 'style="background:#fff3cd;font-weight:700;"' : '';
+              return '<tr '+style+'><td>>='+r.min_votes+'</td><td>'+r.n_anomali+'</td><td>'+r.pct+'%</td><td>'+r.f1+'</td><td>'+r.precision+'</td><td>'+r.recall+'</td><td>'+r.auc_pr+'</td></tr>';
+            }).join("")}</tbody>
+          </table>
+        </div>` : ""}
+    `;
+}
+
+function renderEnsembleThreshold(d) {
+    if (!d.ensemble_results) return;
+    const er = d.ensemble_results;
+    Plotly.newPlot("chartEnsThreshold", [
+        {x: er.map(r => r.min_votes), y: er.map(r => r.f1), mode: "lines+markers",
+         name: "F1", line: {color: "#8e44ad", width: 3}, marker: {size: 10}},
+        {x: er.map(r => r.min_votes), y: er.map(r => r.precision), mode: "lines+markers",
+         name: "Precision", line: {color: "#2980b9", width: 2, dash: "dash"}, marker: {size: 7}},
+        {x: er.map(r => r.min_votes), y: er.map(r => r.recall), mode: "lines+markers",
+         name: "Recall", line: {color: "#27ae60", width: 2, dash: "dash"}, marker: {size: 7}},
+    ], {
+        margin: {t: 10, b: 50, l: 50, r: 10},
+        xaxis: {title: "Minimum Votes (Threshold)", tickvals: [1, 2, 3],
+                ticktext: [">= 1 (longgar)", ">= 2 (default)", ">= 3 (ketat)"]},
+        yaxis: {title: "Score"},
+        legend: {orientation: "h", y: -0.25},
+        plot_bgcolor: "#fafafa"
+    }, {responsive: true, displayModeBar: false});
+
+    // Show best ensemble card
+    const be = d.best_ensemble;
+    document.getElementById("ensembleBestCard").style.display = "block";
+    document.getElementById("bestEnsemble").innerHTML =
+        `Threshold: >= ${be.min_votes} vote | F1: <b>${be.f1}</b> | Prec: ${be.precision} | Rec: ${be.recall} | Anomali: ${be.n_anomali} (${be.pct}%)`;
+}
+
+function renderScoreDist(d) {
+    if (!d.score_dist_normal || !d.score_dist_anomali) return;
+    Plotly.newPlot("chartScoreDist", [
+        {x: d.score_dist_normal, type: "histogram", name: "Normal",
+         marker: {color: "#3498dbaa"}, nbinsx: 40, opacity: 0.7},
+        {x: d.score_dist_anomali, type: "histogram", name: "Anomali (label)",
+         marker: {color: "#e74c3caa"}, nbinsx: 40, opacity: 0.7},
+    ], {
+        margin: {t: 10, b: 40, l: 50, r: 10},
+        barmode: "overlay",
+        xaxis: {title: "Ensemble Score"},
+        yaxis: {title: "Jumlah"},
+        legend: {orientation: "h", y: -0.2},
+        plot_bgcolor: "#fafafa"
+    }, {responsive: true, displayModeBar: false});
+
+    // Precision vs Recall scatter plots
+    renderPRScatter("chartPR_IF", d.results_if, d.best_if, "#2980b9");
+    renderPRScatter("chartPR_LOF", d.results_lof, d.best_lof, "#27ae60");
+}
+
+function renderPRScatter(elId, results, best, baseColor) {
+    if (!results || !results.length) return;
+    const f1vals = results.map(r => r.f1);
+    const maxF1 = Math.max(...f1vals);
+    const minF1 = Math.min(...f1vals);
+
+    Plotly.newPlot(elId, [
+        {
+            x: results.map(r => r.recall),
+            y: results.map(r => r.precision),
+            mode: "markers",
+            marker: {
+                size: 8,
+                color: results.map(r => r.f1),
+                colorscale: "RdYlGn",
+                cmin: minF1, cmax: maxF1,
+                colorbar: {title: "F1", thickness: 12, len: 0.8},
+                line: {width: 0.5, color: "white"}
+            },
+            text: results.map(r => `F1=${r.f1}<br>cont=${r.contamination}`),
+            hovertemplate: "Recall: %{x:.3f}<br>Precision: %{y:.3f}<br>%{text}<extra></extra>",
+            name: "Kombinasi"
+        },
+        {
+            x: [best.recall],
+            y: [best.precision],
+            mode: "markers",
+            marker: {size: 16, color: "red", symbol: "star"},
+            name: "Terbaik",
+            hovertemplate: `Terbaik<br>Recall: ${best.recall}<br>Precision: ${best.precision}<br>F1: ${best.f1}<extra></extra>`
+        }
+    ], {
+        margin: {t: 10, b: 40, l: 50, r: 10},
+        xaxis: {title: "Recall"},
+        yaxis: {title: "Precision"},
+        legend: {orientation: "h", y: -0.2},
+        plot_bgcolor: "#fafafa"
+    }, {responsive: true, displayModeBar: false});
+}
+
+function renderDefaultVsBest(d) {
+    if (!d.baseline || !d.best_if) return;
+    const bl = d.baseline;
+    const models = ["IF", "LOF", "ECOD", "Ensemble"];
+    const metrics = ["f1", "precision", "recall", "auc"];
+    const metricLabels = ["F1 Score", "Precision", "Recall", "AUC-PR"];
+
+    // Get best values from grid search
+    const bestVals = {
+        "IF": d.best_if,
+        "LOF": d.best_lof,
+        "ECOD": d.best_ecod,
+        "Ensemble": d.best_ensemble || {}
+    };
+
+    // Build grouped bar: for each metric, show baseline vs best for each model
+    const traces = [];
+    const x = [];
+    const yBaseline = [];
+    const yBest = [];
+
+    models.forEach(model => {
+        metrics.forEach((m, mi) => {
+            const label = `${model}\n${metricLabels[mi]}`;
+            x.push(label);
+            const blVal = bl[model] ? (bl[model][m] || bl[model][m === "auc" ? "auc" : m] || 0) : 0;
+            let bsVal = 0;
+            if (model === "Ensemble" && bestVals.Ensemble) {
+                bsVal = bestVals.Ensemble[m] || bestVals.Ensemble[m === "auc" ? "auc_pr" : m] || 0;
+            } else if (bestVals[model]) {
+                bsVal = bestVals[model][m] || 0;
+            }
+            yBaseline.push(blVal);
+            yBest.push(bsVal);
+        });
+    });
+
+    // Simpler approach: one chart per model showing F1/Precision/Recall/AUC
+    const categories = models;
+    const baseF1 = categories.map(m => bl[m] ? bl[m].f1 : 0);
+    const bestF1 = categories.map(m => {
+        if (m === "Ensemble") return d.best_ensemble ? d.best_ensemble.f1 : 0;
+        return bestVals[m] ? bestVals[m].f1 : 0;
+    });
+    const baseAUC = categories.map(m => bl[m] ? bl[m].auc : 0);
+    const bestAUC = categories.map(m => {
+        if (m === "Ensemble") return d.best_ensemble ? d.best_ensemble.auc_pr : 0;
+        return bestVals[m] ? bestVals[m].auc : 0;
+    });
+
+    Plotly.newPlot("chartDefaultVsBest", [
+        {x: categories, y: baseF1, name: "Default (Baseline) — F1", type: "bar",
+         marker: {color: "#bdc3c7"}, text: baseF1.map(v => v.toFixed(4)), textposition: "outside"},
+        {x: categories, y: bestF1, name: "Grid Search Best — F1", type: "bar",
+         marker: {color: "#e74c3c"}, text: bestF1.map(v => v.toFixed(4)), textposition: "outside"},
+        {x: categories, y: baseAUC, name: "Default — AUC-PR", type: "bar",
+         marker: {color: "#d5dbdb"}, text: baseAUC.map(v => v.toFixed(4)), textposition: "outside"},
+        {x: categories, y: bestAUC, name: "Grid Search Best — AUC-PR", type: "bar",
+         marker: {color: "#3498db"}, text: bestAUC.map(v => v.toFixed(4)), textposition: "outside"},
+    ], {
+        barmode: "group",
+        margin: {t: 10, b: 40, l: 50, r: 10},
+        yaxis: {title: "Score"},
+        legend: {orientation: "h", y: -0.15, font: {size: 10}},
+        plot_bgcolor: "#fafafa"
+    }, {responsive: true, displayModeBar: false});
+}
+
+// ═══ TABEL PERBANDINGAN UNTUK TESIS ═══
+// Format: Aspek | Sebelum Grid Search | Sesudah Grid Search | Perubahan
+function renderThesisTables(d) {
+    if (!d.best_if) return;
+
+    const bl = d.baseline || {};
+    const bp = d.baseline_params || {};
+    const fmt = (v) => (v === null || v === undefined) ? "—" : (typeof v === "number" ? v.toFixed(4) : v);
+    const fmtInt = (v) => (v === null || v === undefined) ? "—" : Number(v).toLocaleString("id-ID");
+
+    // Delta untuk metrik (4 desimal, dengan tanda arah)
+    function deltaMetric(before, after) {
+        if (before === null || after === null || before === undefined || after === undefined) return `<span class="delta-zero">—</span>`;
+        const diff = after - before;
+        if (Math.abs(diff) < 0.0001) return `<span class="delta-zero">0,0000</span>`;
+        const cls = diff > 0 ? "delta-pos" : "delta-neg";
+        const sign = diff > 0 ? "+" : "−";
+        return `<span class="${cls}">${sign}${Math.abs(diff).toFixed(4).replace(".", ",")}</span>`;
+    }
+    // Delta untuk jumlah (integer)
+    function deltaCount(before, after) {
+        if (before === null || after === null || before === undefined || after === undefined) return "—";
+        const diff = after - before;
+        if (diff === 0) return `<span class="delta-zero">0</span>`;
+        const cls = diff > 0 ? "delta-pos" : "delta-neg";
+        const sign = diff > 0 ? "+" : "−";
+        return `<span class="${cls}">${sign}${Math.abs(diff).toLocaleString("id-ID")}</span>`;
+    }
+    // Delta untuk persentase (poin)
+    function deltaPct(before, after) {
+        if (before === null || after === null || before === undefined || after === undefined) return "—";
+        const diff = after - before;
+        if (Math.abs(diff) < 0.005) return `<span class="delta-zero">0,00 poin</span>`;
+        const cls = diff > 0 ? "delta-pos" : "delta-neg";
+        const sign = diff > 0 ? "+" : "−";
+        return `<span class="${cls}">${sign}${Math.abs(diff).toFixed(2).replace(".", ",")} poin</span>`;
+    }
+    const dec = (v) => (v === null || v === undefined) ? "—" : v.toFixed(4).replace(".", ",");
+    const pctTxt = (v) => (v === null || v === undefined) ? "—" : v.toFixed(2).replace(".", ",") + "%";
+
+    // Builder tabel per-algoritma gaya tesis
+    function buildAlgoTable(tableId, paramBeforeStr, paramAfterStr, before, after) {
+        const rows = [
+            ["Parameter utama", paramBeforeStr, paramAfterStr, "-"],
+            ["Jumlah anomali",
+                fmtInt(before ? before.n_anomali : null),
+                fmtInt(after ? after.n_anomali : null),
+                deltaCount(before ? before.n_anomali : null, after ? after.n_anomali : null)],
+            ["Persentase anomali",
+                pctTxt(before ? before.pct : null),
+                pctTxt(after ? after.pct : null),
+                deltaPct(before ? before.pct : null, after ? after.pct : null)],
+            ["Precision",
+                dec(before ? before.precision : null),
+                dec(after ? after.precision : null),
+                deltaMetric(before ? before.precision : null, after ? after.precision : null)],
+            ["Recall",
+                dec(before ? before.recall : null),
+                dec(after ? after.recall : null),
+                deltaMetric(before ? before.recall : null, after ? after.recall : null)],
+            ["F1-Score",
+                dec(before ? before.f1 : null),
+                dec(after ? after.f1 : null),
+                deltaMetric(before ? before.f1 : null, after ? after.f1 : null)],
+            ["AUC-PR",
+                dec(before ? before.auc : null),
+                dec(after ? (after.auc !== undefined ? after.auc : after.auc_pr) : null),
+                deltaMetric(before ? before.auc : null, after ? (after.auc !== undefined ? after.auc : after.auc_pr) : null)],
+        ];
+        let html = `<thead><tr>
+            <th>Aspek</th><th>Sebelum Grid Search</th>
+            <th>Sesudah Grid Search</th><th>Perubahan</th></tr></thead><tbody>`;
+        rows.forEach(r => {
+            html += `<tr>
+                <td>${r[0]}</td>
+                <td class="col-before" style="text-align:left;font-weight:400;">${r[1]}</td>
+                <td class="col-after" style="text-align:left;font-weight:400;">${r[2]}</td>
+                <td>${r[3]}</td></tr>`;
+        });
+        html += `</tbody>`;
+        document.getElementById(tableId).innerHTML = html;
+    }
+
+    // ── Isolation Forest ──
+    const ifParamBefore = bp.IF
+        ? `n_estimators=${bp.IF.n_estimators}; contamination=${String(bp.IF.contamination).replace(".", ",")}`
+        : "—";
+    const ifParamAfter = `n_estimators=${d.best_if.n_estimators}; contamination=${String(d.best_if.contamination).replace(".", ",")}`;
+    buildAlgoTable("tblThesisIF", ifParamBefore, ifParamAfter, bl.IF, d.best_if);
+
+    // ── LOF ──
+    const lofMetricBefore = bp.LOF && bp.LOF.metric ? bp.LOF.metric : "minkowski";
+    const lofMetricAfter = d.best_lof.metric || "minkowski";
+    const lofParamBefore = bp.LOF
+        ? `metric=${lofMetricBefore}; n_neighbors=${bp.LOF.n_neighbors}; contamination=${String(bp.LOF.contamination).replace(".", ",")}`
+        : "—";
+    const lofParamAfter = `metric=${lofMetricAfter}; n_neighbors=${d.best_lof.n_neighbors}; contamination=${String(d.best_lof.contamination).replace(".", ",")}`;
+    buildAlgoTable("tblThesisLOF", lofParamBefore, lofParamAfter, bl.LOF, d.best_lof);
+
+    // ── ECOD ──
+    const ecodParamBefore = bp.ECOD ? `contamination=${String(bp.ECOD.contamination).replace(".", ",")}` : "—";
+    const ecodParamAfter = `contamination=${String(d.best_ecod.contamination).replace(".", ",")}`;
+    buildAlgoTable("tblThesisECOD", ecodParamBefore, ecodParamAfter, bl.ECOD, d.best_ecod);
+
+    // ── Ensemble ──
+    const ensVotesAfter = d.best_ensemble ? d.best_ensemble.min_votes : "-";
+    buildAlgoTable("tblThesisENS",
+        "Weighted voting (min_votes=2)",
+        `Weighted voting (min_votes=${ensVotesAfter})`,
+        bl.Ensemble, d.best_ensemble);
+
+    // ── Ringkasan kinerja seluruh algoritma (sesudah grid) ──
+    const summaryModels = [
+        {name: "Isolation Forest", v: d.best_if},
+        {name: "Local Outlier Factor", v: d.best_lof},
+        {name: "ECOD", v: d.best_ecod},
+        {name: "Ensemble", v: d.best_ensemble ? {
+            precision: d.best_ensemble.precision, recall: d.best_ensemble.recall,
+            f1: d.best_ensemble.f1, auc: d.best_ensemble.auc_pr,
+            n_anomali: d.best_ensemble.n_anomali, pct: d.best_ensemble.pct
+        } : null},
+    ];
+    let bestF1 = -1;
+    summaryModels.forEach(m => { if (m.v && m.v.f1 > bestF1) bestF1 = m.v.f1; });
+
+    let sumHtml = `<thead><tr>
+        <th>Algoritma</th><th>Precision</th><th>Recall</th>
+        <th>F1-Score</th><th>AUC-PR</th><th>Jumlah Anomali</th><th>% Anomali</th></tr></thead><tbody>`;
+    summaryModels.forEach(m => {
+        const v = m.v;
+        const isBest = v && Math.abs(v.f1 - bestF1) < 1e-9;
+        sumHtml += `<tr${isBest ? ' class="row-best"' : ''}>
+            <td>${m.name}${isBest ? ' <span style="color:#27ae60;font-size:.7rem;">★</span>' : ''}</td>
+            <td>${v ? dec(v.precision) : "—"}</td>
+            <td>${v ? dec(v.recall) : "—"}</td>
+            <td>${v ? dec(v.f1) : "—"}</td>
+            <td>${v ? dec(v.auc) : "—"}</td>
+            <td>${v ? fmtInt(v.n_anomali) : "—"}</td>
+            <td>${v ? pctTxt(v.pct) : "—"}</td></tr>`;
+    });
+    sumHtml += `</tbody>`;
+    document.getElementById("tblThesisSummary").innerHTML = sumHtml;
+
+    // ── Confusion matrix seluruh algoritma (sesudah grid) ──
+    const cmModels = [
+        {name: "Isolation Forest", v: d.best_if},
+        {name: "Local Outlier Factor", v: d.best_lof},
+        {name: "ECOD", v: d.best_ecod},
+        {name: "Ensemble", v: d.best_ensemble},
+    ];
+    let cmHtml = `<thead><tr>
+        <th>Algoritma</th>
+        <th>TP<br><span style="font-weight:400;font-size:.7rem;">True Positive</span></th>
+        <th>FP<br><span style="font-weight:400;font-size:.7rem;">False Positive</span></th>
+        <th>FN<br><span style="font-weight:400;font-size:.7rem;">False Negative</span></th>
+        <th>TN<br><span style="font-weight:400;font-size:.7rem;">True Negative</span></th></tr></thead><tbody>`;
+    cmModels.forEach(m => {
+        const v = m.v;
+        const has = v && v.tp !== undefined;
+        cmHtml += `<tr>
+            <td>${m.name}</td>
+            <td style="color:#27ae60;font-weight:600;">${has ? fmtInt(v.tp) : "—"}</td>
+            <td style="color:#e74c3c;">${has ? fmtInt(v.fp) : "—"}</td>
+            <td style="color:#e67e22;">${has ? fmtInt(v.fn) : "—"}</td>
+            <td style="color:#27ae60;">${has ? fmtInt(v.tn) : "—"}</td></tr>`;
+    });
+    cmHtml += `</tbody>`;
+    document.getElementById("tblThesisCM").innerHTML = cmHtml;
+}
+
+function copyThesisTables() {
+    function tableToTSV(tableId) {
+        const tbl = document.getElementById(tableId);
+        if (!tbl) return "";
+        let tsv = "";
+        tbl.querySelectorAll("tr").forEach(tr => {
+            const cells = Array.from(tr.querySelectorAll("th,td"))
+                .map(c => c.textContent.replace(/\s+/g, " ").trim());
+            tsv += cells.join("\t") + "\n";
+        });
+        return tsv;
+    }
+    const text =
+          "TABEL — ISOLATION FOREST (Sebelum vs Sesudah Grid Search)\n" + tableToTSV("tblThesisIF")
+        + "\nTABEL — LOCAL OUTLIER FACTOR (Sebelum vs Sesudah Grid Search)\n" + tableToTSV("tblThesisLOF")
+        + "\nTABEL — ECOD (Sebelum vs Sesudah Grid Search)\n" + tableToTSV("tblThesisECOD")
+        + "\nTABEL — ENSEMBLE (Sebelum vs Sesudah Grid Search)\n" + tableToTSV("tblThesisENS")
+        + "\nTABEL — RINGKASAN KINERJA SELURUH ALGORITMA (Sesudah Grid Search)\n" + tableToTSV("tblThesisSummary")
+        + "\nTABEL — CONFUSION MATRIX SELURUH ALGORITMA (Sesudah Grid Search)\n" + tableToTSV("tblThesisCM");
+
+    navigator.clipboard.writeText(text).then(() => {
+        const eb = document.getElementById("errorBox");
+        eb.style.display = "block";
+        eb.style.background = "#eafaf1";
+        eb.style.border = "1px solid #27ae60";
+        eb.style.color = "#1d8348";
+        eb.innerHTML = "✅ Semua tabel disalin ke clipboard. Tempel (paste) langsung ke Word/Excel.";
+        setTimeout(() => { eb.style.display = "none"; eb.style = ""; }, 4000);
+    }).catch(() => {
+        alert("Gagal menyalin. Browser mungkin memblokir akses clipboard.");
+    });
+}
+
+function applyBestParams() {
+    if (!LAST_GRID) return;
+    const g = LAST_GRID;
+
+    // IF
+    document.getElementById("if_n_estimators").value  = g.best_if.n_estimators;
+    document.getElementById("lbl_if_n_estimators").textContent = g.best_if.n_estimators;
+    document.getElementById("if_contamination").value = g.best_if.contamination;
+    document.getElementById("lbl_if_contamination").textContent = g.best_if.contamination.toFixed(2);
+
+    // LOF
+    document.getElementById("lof_n_neighbors").value  = g.best_lof.n_neighbors;
+    document.getElementById("lbl_lof_n_neighbors").textContent = g.best_lof.n_neighbors;
+    document.getElementById("lof_contamination").value = g.best_lof.contamination;
+    document.getElementById("lbl_lof_contamination").textContent = g.best_lof.contamination.toFixed(2);
+    if (g.best_lof.metric) {
+        document.getElementById("lof_metric").value = g.best_lof.metric;
+    }
+
+    // ECOD
+    document.getElementById("ecod_contamination").value = g.best_ecod.contamination;
+    document.getElementById("lbl_ecod_contamination").textContent = g.best_ecod.contamination.toFixed(3);
+
+    // Ensemble threshold (dari grid search)
+    if (g.best_ensemble && g.best_ensemble.min_votes) {
+        document.getElementById("ensemble_min_votes").value = g.best_ensemble.min_votes;
+        document.getElementById("lbl_ensemble_min_votes").textContent = g.best_ensemble.min_votes;
+    }
+
+    // Notifikasi
+    const eb = document.getElementById("errorBox");
+    eb.style.display = "block";
+    eb.style.background = "#eafaf1";
+    eb.style.border = "1px solid #27ae60";
+    eb.style.color = "#1d8348";
+    eb.innerHTML = "✅ Parameter terbaik dari Grid Search sudah diterapkan ke slider tuning. Klik <strong>Jalankan Tuning</strong> untuk menyimpan ke model.";
+    setTimeout(() => { eb.style.display = "none"; eb.style = ""; }, 6000);
+
+    // Scroll ke slider
+    document.querySelector(".param-panel").scrollIntoView({behavior: "smooth", block: "start"});
+}
+</script>
+{% endblock %}

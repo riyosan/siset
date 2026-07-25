@@ -1,0 +1,235 @@
+{% extends "base.html" %}
+{% block title %}Dashboard Deteksi Anomali{% endblock %}
+{% block head_extra %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+{% endblock %}
+
+{% block content %}
+<style>
+  .ac-reason-clickable { cursor:pointer; transition:background .2s; border-radius:4px; padding:2px 4px; }
+  .ac-reason-clickable:hover { background:#fff3cd; }
+  .ac-detail-btn { font-size:.72rem; color:#2980b9; cursor:pointer; margin-top:4px; font-weight:600; transition:color .2s; }
+  .ac-detail-btn:hover { color:#e74c3c; }
+  .lompat-badge { display:inline-block; background:#e74c3c; color:#fff; font-size:.65rem; padding:1px 6px; border-radius:8px; margin-left:4px; }
+  .lompat-popup {
+    background:#2c3e50; color:#fff; border-radius:10px; padding:0;
+    box-shadow:0 8px 24px rgba(0,0,0,.3); overflow:hidden;
+    font-size:.8rem; min-width:280px;
+  }
+  .lompat-popup-header { background:#1a252f; padding:8px 12px; font-weight:700; font-size:.78rem; }
+  .lompat-popup-body { padding:10px 12px; }
+  .lompat-row { display:flex; justify-content:space-between; padding:4px 0; border-bottom:1px solid #34495e; }
+  .lompat-row:last-child { border-bottom:none; }
+  .lompat-label { color:#95a5a6; }
+  .lompat-val { font-weight:600; }
+  .lompat-danger { color:#e74c3c; }
+  .lompat-note { margin-top:8px; padding:6px 8px; background:#34495e; border-radius:6px; font-size:.72rem; color:#f39c12; }
+  .lompat-popup-close { position:absolute; top:6px; right:10px; cursor:pointer; font-size:1rem; color:#95a5a6; }
+  .lompat-popup-close:hover { color:#fff; }
+</style>
+<div class="page-header">
+  <h1 class="page-title">Dashboard Deteksi Anomali Presensi Pegawai</h1>
+  <p class="page-sub">Ringkasan anomali presensi untuk pengambilan keputusan</p>
+</div>
+
+<!-- KPI CARDS -->
+<div class="kpi-grid" id="kpiGrid">
+  <div class="kpi-card"><div class="kpi-icon">📋</div><div class="kpi-val" id="kpiTotal">—</div><div class="kpi-label">Total Rekaman</div></div>
+  <div class="kpi-card kpi-red"><div class="kpi-icon">🚨</div><div class="kpi-val" id="kpiAnomali">—</div><div class="kpi-label">Total Anomali</div></div>
+  <div class="kpi-card kpi-purple"><div class="kpi-icon">📊</div><div class="kpi-val" id="kpiPct">—</div><div class="kpi-label">Persentase Anomali</div></div>
+  <div class="kpi-card kpi-teal"><div class="kpi-icon">🏢</div><div class="kpi-val" id="kpiSkpd">—</div><div class="kpi-label">SKPD Terdampak</div></div>
+</div>
+
+<!-- GRAFIK BARIS 1 -->
+<div class="chart-row">
+  <div class="card chart-card" style="flex:1">
+    <div class="card-header" style="display:flex; justify-content:space-between; align-items:center;">
+      <span>Tren Harian % Anomali</span>
+      <select id="trenMonthFilter" onchange="renderTrenChart()" style="padding:4px 8px; border-radius:6px; font-size:0.85rem; border:1px solid #ccc; cursor:pointer;">
+        <option value="">Semua Bulan</option>
+      </select>
+    </div>
+    <div class="card-body"><canvas id="chartTren" height="120"></canvas></div>
+  </div>
+</div>
+
+<!-- GRAFIK BARIS 2 -->
+<div class="chart-row">
+  <div class="card chart-card" style="flex:1">
+    <div class="card-header">Top 5 SKPD — Anomali Terbanyak</div>
+    <div class="card-body"><canvas id="chartSkpd" height="180"></canvas></div>
+  </div>
+</div>
+
+<!-- ALERT CARDS -->
+<div class="card">
+  <div class="card-header">🔔 Pegawai dengan Skor Anomali Tertinggi</div>
+  <div class="card-body">
+    <div class="alert-grid" id="alertGrid">
+      <p class="loading-msg">Memuat data…</p>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+
+fetch("/api/dashboard")
+  .then(r=>r.json()).then(d=>{
+    if(!d.ok){ document.getElementById("alertGrid").innerHTML=`<p class="err">${d.error}</p>`; return; }
+
+    // KPI
+    document.getElementById("kpiTotal").textContent   = d.total_data.toLocaleString("id");
+    document.getElementById("kpiAnomali").textContent = d.total_anomali.toLocaleString("id");
+    document.getElementById("kpiPct").textContent     = d.pct_anomali + "%";
+    document.getElementById("kpiSkpd").textContent    = d.skpd_terdampak;
+
+    // Tren chart
+    window._trenData = d.tren;
+    
+    // Populate month filter dropdown
+    const months = new Set();
+    d.tren.forEach(t => {
+      const dDate = new Date(t.tanggal);
+      if(!isNaN(dDate)) months.add(dDate.getMonth() + 1); // 1-indexed
+    });
+    const selMonth = document.getElementById("trenMonthFilter");
+    Array.from(months).sort((a,b)=>a-b).forEach(m => {
+      selMonth.innerHTML += `<option value="${m}">Bulan ${m}</option>`;
+    });
+
+    renderTrenChart();
+
+
+    // Bar SKPD
+    const sk = d.top_skpd;
+    new Chart(document.getElementById("chartSkpd"),{
+      type:"bar",
+      data:{
+        labels:sk.map(s=>s.skpd),
+        datasets:[{label:"Jumlah Anomali",data:sk.map(s=>s.jumlah),
+          backgroundColor:"#E24B4A",borderColor:"#fff",borderWidth:1}]
+      },
+      options:{
+        indexAxis:"y",
+        responsive:true,
+        plugins:{legend:{display:false}},
+        scales:{x:{title:{display:true,text:"Jumlah Anomali"}}}
+      }
+    });
+
+    // Alert cards
+    const grid = document.getElementById("alertGrid");
+    window._alertsData = d.alerts;
+    grid.innerHTML = d.alerts.map((a, idx)=>{
+      const reason1 = a.alasan_utama || "-";
+      return `<div class="alert-card">
+        <div class="ac-top"><span class="ac-id">👤 ${a.karyawan_id}</span></div>
+        <div class="ac-skpd">🏢 ${a.id_skpd}</div>
+        <div class="ac-date">📅 ${(a.tanggal_kirim||"").substring(0,16)}</div>
+        <div class="ac-score">Skor: <strong>${a.ensemble_score||"-"}</strong></div>
+        <div class="ac-reason">⚠ ${reason1}</div>
+        <div class="ac-detail-btn" onclick="showDetailPopup(event, ${idx})">📋 Detail alasan</div>
+      </div>`;
+    }).join("");
+  }).catch(e=>{
+    document.getElementById("alertGrid").innerHTML=`<p class="err">Gagal memuat: ${e}</p>`;
+  });
+
+let chartTrenInstance = null;
+function renderTrenChart() {
+  let tren = window._trenData || [];
+  const mFilter = document.getElementById("trenMonthFilter").value;
+  if (mFilter) {
+    tren = tren.filter(t => {
+      const dDate = new Date(t.tanggal);
+      return !isNaN(dDate) && (dDate.getMonth() + 1) == parseInt(mFilter);
+    });
+  }
+
+  if(chartTrenInstance) chartTrenInstance.destroy();
+
+  chartTrenInstance = new Chart(document.getElementById("chartTren"),{
+    type:"bar",
+    data:{
+      labels: tren.map(t=>t.tanggal),
+      datasets:[{
+        type:"line", label:"% Anomali", data:tren.map(t=>t.pct),
+        borderColor:"#E24B4A", backgroundColor:"rgba(226,75,74,0.1)",
+        tension:0.3, fill:true, pointRadius:2, order:0
+      },{
+        type:"bar", label:"Total Presensi", data:tren.map(t=>t.total),
+        backgroundColor:"rgba(55,138,221,0.3)", yAxisID:"y2", order:1
+      }]
+    },
+    options:{
+      responsive:true,
+      scales:{
+        x:{ticks:{maxRotation:45, font:{size:9}}},
+        y:{title:{display:true,text:"% Anomali"},min:0},
+        y2:{position:"right",title:{display:true,text:"Total Presensi"},grid:{drawOnChartArea:false}}
+      },
+      plugins:{legend:{position:"top"}}
+    }
+  });
+}
+
+function showDetailPopup(evt, idx) {
+  evt.stopPropagation();
+  document.querySelectorAll('.lompat-popup').forEach(p => p.remove());
+  const old = document.getElementById('popupOverlay');
+  if (old) old.remove();
+
+  const a = window._alertsData[idx];
+  if (!a) return;
+
+  const reasons = [];
+  if (a.alasan_utama) reasons.push({rank: 1, val: a.alasan_utama, score: a.shap_top1_nilai});
+  if (a.alasan_kedua) reasons.push({rank: 2, val: a.alasan_kedua, score: a.shap_top2_nilai});
+
+  const extras = [];
+  if (a.fe_jarak_masuk_pulang && parseFloat(a.fe_jarak_masuk_pulang) > 0.5) {
+    extras.push(`📍 Jarak masuk↔pulang: <strong>${parseFloat(a.fe_jarak_masuk_pulang).toFixed(2)} km</strong>`);
+    if (a.lat_masuk && a.long_masuk)
+      extras.push(`&nbsp;&nbsp;&nbsp;📌 Lokasi masuk: ${parseFloat(a.lat_masuk).toFixed(6)}, ${parseFloat(a.long_masuk).toFixed(6)}`);
+    if (a.lat_pulang && a.long_pulang)
+      extras.push(`&nbsp;&nbsp;&nbsp;📌 Lokasi pulang: ${parseFloat(a.lat_pulang).toFixed(6)}, ${parseFloat(a.long_pulang).toFixed(6)}`);
+  }
+  if (a.fe_drift_lokasi && parseFloat(a.fe_drift_lokasi) > 0.5)
+    extras.push(`↗️ Drift dari hari sebelumnya: <strong>${parseFloat(a.fe_drift_lokasi).toFixed(2)} km</strong>`);
+  if (a.lat && a.long)
+    extras.push(`🌐 Koordinat rekaman ini: ${parseFloat(a.lat).toFixed(6)}, ${parseFloat(a.long).toFixed(6)}`);
+
+  const popup = document.createElement('div');
+  popup.className = 'lompat-popup';
+  popup.style.cssText = 'position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);width:380px;z-index:9999;';
+  popup.innerHTML = `
+    <div class="lompat-popup-header">📋 Detail Anomali — Pegawai ${a.karyawan_id}</div>
+    <div class="lompat-popup-body">
+      <div style="font-size:.72rem;color:#95a5a6;margin-bottom:8px;">Skor: ${a.ensemble_score} | ${(a.tanggal_kirim||"").substring(0,16)}</div>
+      <div style="font-size:.72rem;color:#95a5a6;margin-bottom:4px;text-transform:uppercase;letter-spacing:.5px;">Alasan Anomali (urutan kontribusi SHAP):</div>
+      ${reasons.map(r => `
+        <div style="display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid #34495e;">
+          <span style="background:#e74c3c;color:#fff;border-radius:50%;width:20px;height:20px;display:flex;align-items:center;justify-content:center;font-size:.7rem;font-weight:700;flex-shrink:0;">${r.rank}</span>
+          <span style="flex:1;font-size:.82rem;">${r.val}</span>
+          ${r.score ? `<span style="font-size:.72rem;color:#f39c12;">${r.score > 0 ? '+' : ''}${r.score}</span>` : ''}
+        </div>
+      `).join("")}
+      ${extras.length ? `<div style="border-top:1px solid #34495e;margin-top:8px;padding-top:8px;">
+        ${extras.map(e => `<div style="font-size:.78rem;margin:4px 0;">${e}</div>`).join("")}
+      </div>` : ''}
+    </div>
+    <div class="lompat-popup-close" onclick="event.stopPropagation();this.parentElement.remove();document.getElementById('popupOverlay').remove();">✕</div>
+  `;
+
+  const overlay = document.createElement('div');
+  overlay.id = 'popupOverlay';
+  overlay.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.4);z-index:9998;';
+  overlay.onclick = function(){ popup.remove(); this.remove(); };
+
+  document.body.appendChild(overlay);
+  document.body.appendChild(popup);
+}
+</script>
+{% endblock %}

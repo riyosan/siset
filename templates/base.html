@@ -1,0 +1,314 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <meta name="description" content="Sistem Deteksi Anomali Presensi Pegawai berbasis Ensemble Unsupervised Learning"/>
+  <title>{% block title %}Deteksi Anomali Presensi{% endblock %} — {{ nama_instansi }}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}"/>
+
+  <!-- ── Fullscreen visualisasi (berlaku untuk semua chart Plotly) ───── -->
+  <style>
+    .viz-fs-btn{
+      position:absolute; top:8px; right:8px; z-index:30;
+      width:30px; height:30px; padding:0; cursor:pointer;
+      display:flex; align-items:center; justify-content:center;
+      background:rgba(255,255,255,.92); color:#34506e;
+      border:1px solid #d6dee6; border-radius:6px; font-size:15px; line-height:1;
+      box-shadow:0 1px 3px rgba(0,0,0,.12); transition:all .15s; opacity:.55;
+    }
+    .viz-fs-btn:hover{ background:#2980b9; color:#fff; border-color:#2980b9; opacity:1; }
+    .js-plotly-plot:hover .viz-fs-btn{ opacity:1; }
+
+    .viz-fs-overlay{
+      position:fixed; inset:0; z-index:99990; display:none;
+      flex-direction:column; background:rgba(255,255,255,.99);
+    }
+    .viz-fs-overlay.open{ display:flex; }
+    .viz-fs-bar{
+      display:flex; align-items:center; justify-content:space-between;
+      gap:1rem; padding:.6rem 1.1rem; border-bottom:1px solid #e1e8ed; background:#f7f9fc;
+    }
+    .viz-fs-bar .ttl{ font-size:.95rem; font-weight:700; color:#2c3e50; }
+    .viz-fs-close{
+      border:none; background:#e74c3c; color:#fff; border-radius:6px;
+      padding:6px 14px; cursor:pointer; font-size:.82rem; font-weight:600; white-space:nowrap;
+    }
+    .viz-fs-close:hover{ background:#c0392b; }
+    .viz-fs-body{ flex:1; min-height:0; padding:.4rem 1rem 1rem; }
+    #vizFsChart{ width:100%; height:100%; }
+  </style>
+
+  {% block head_extra %}{% endblock %}
+</head>
+<body>
+
+<!-- ── TOPBAR ─────────────────────────────────────────────── -->
+<header class="topbar">
+  <div class="topbar-inner">
+    <div class="topbar-brand">
+      <span class="brand-icon">⚠</span>
+      <div>
+        <div class="brand-title">SISTEM DETEKSI ANOMALI PRESENSI PEGAWAI</div>
+        <div class="brand-sub">{{ nama_instansi }}</div>
+      </div>
+    </div>
+    <nav class="topnav">
+      <a href="/" class="{% if request.path=='/' %}active{% endif %}">📊 Dashboard</a>
+
+      <!-- Grup: Analisis -->
+      <div class="nav-group {% if request.path in ['/eda','/kinerja','/shap','/perbandingan'] %}active{% endif %}">
+        <span class="nav-group-label">🔬 Analisis ▾</span>
+        <div class="nav-dropdown">
+          <a href="/eda"          class="{% if request.path=='/eda' %}active{% endif %}">🔬 EDA</a>
+          <a href="/kinerja"      class="{% if request.path=='/kinerja' %}active{% endif %}">📈 Kinerja Algoritma</a>
+          <a href="/shap"         class="{% if request.path=='/shap' %}active{% endif %}">🔍 SHAP</a>
+          <a href="/perbandingan" class="{% if request.path=='/perbandingan' %}active{% endif %}">📅 Perbandingan Periode</a>
+        </div>
+      </div>
+
+      <!-- Grup: Operasional -->
+      <div class="nav-group {% if request.path.startswith('/profil') or request.path in ['/detail'] %}active{% endif %}">
+        <span class="nav-group-label">🗂️ Operasional ▾</span>
+        <div class="nav-dropdown">
+          <a href="/detail"      class="{% if request.path=='/detail' %}active{% endif %}">📋 Detail Anomali</a>
+          <a href="/profil"      class="{% if request.path.startswith('/profil') %}active{% endif %}">👤 Profil Pegawai</a>
+        </div>
+      </div>
+
+      <!-- Grup: Sistem -->
+      <div class="nav-group {% if request.path in ['/tuning','/upload'] %}active{% endif %}">
+        <span class="nav-group-label">⚙️ Sistem ▾</span>
+        <div class="nav-dropdown">
+          <a href="/tuning" class="{% if request.path=='/tuning' %}active{% endif %}">⚙️ Tuning Parameter</a>
+          <a href="/upload" class="{% if request.path=='/upload' %}active{% endif %}">📁 Upload & Laporan</a>
+        </div>
+      </div>
+    </nav>
+  </div>
+</header>
+
+<!-- ── STATUS BAR — data terakhir diproses ─────────────────── -->
+<div id="statusBar" style="
+  background:#f0f4f8; border-bottom:1px solid #e1e8ed;
+  font-size:.75rem; color:#7f8c8d;
+  padding:5px 1.5rem; display:none; align-items:center; gap:.8rem; flex-wrap:wrap;
+"></div>
+<script>
+fetch("/api/status").then(r=>r.json()).then(d=>{
+  if(!d.ok || !d.last_processed) return;
+  const bar = document.getElementById("statusBar");
+  bar.style.display = "flex";
+  const sep = '<span style="color:#d1d5db;margin:0 .3rem">|</span>';
+  const parts = [`🕐 Diproses: <strong>${d.last_processed}</strong>`];
+  if(d.periode_start) parts.push(`📅 ${d.periode_start} s/d ${d.periode_end}`);
+  if(d.n_rows)        parts.push(`📋 ${Number(d.n_rows).toLocaleString()} rekaman`);
+  if(d.n_anomali!=null) parts.push(`🚨 ${Number(d.n_anomali).toLocaleString()} anomali`);
+  bar.innerHTML = parts.join(sep);
+}).catch(()=>{});
+</script>
+
+<!-- ── KONTEN UTAMA ───────────────────────────────────────── -->
+<main class="main-content">
+  {% if not has_model %}
+  <div class="alert-info">
+    ℹ️ Belum ada data yang diproses.
+    <a href="/upload">Upload file Excel/CSV</a> untuk memulai analisis.
+  </div>
+  {% endif %}
+  {% block content %}{% endblock %}
+</main>
+
+<footer class="site-footer">
+  Deteksi Anomali Presensi Pegawai &nbsp;|&nbsp; {{ nama_instansi }} &nbsp;|&nbsp;
+  Dibuat untuk keperluan Tesis — Prototipe, Bukan Sistem Produksi
+</footer>
+
+{% block scripts %}{% endblock %}
+
+<!-- ── Overlay fullscreen visualisasi ─────────────────────────────── -->
+<div id="vizFsOverlay" class="viz-fs-overlay" role="dialog" aria-modal="true">
+  <div class="viz-fs-bar">
+    <span class="ttl" id="vizFsTitle">Visualisasi</span>
+    <button type="button" class="viz-fs-close" onclick="closeVizFullscreen()">✕ Tutup (Esc)</button>
+  </div>
+  <div class="viz-fs-body">
+    <div id="vizFsBody" style="width:100%;height:100%;"></div>
+  </div>
+</div>
+
+<script>
+/* ════════════════════════════════════════════════════════════════
+   Fullscreen untuk SEMUA visualisasi (Plotly + Chart.js).
+   - Menempelkan tombol ⛶ pada tiap grafik secara otomatis.
+   - Saat dibuka, grafik digambar ulang memakai seluruh layar
+     sehingga label/teks yang terpotong tampil penuh.
+   ════════════════════════════════════════════════════════════════ */
+(function () {
+  const hasPlotly = (typeof Plotly !== "undefined");
+  const hasChart  = (typeof Chart   !== "undefined");
+  if (!hasPlotly && !hasChart) return;
+
+  // ── util: cari judul terdekat (card-header / h4 / h3) ──
+  function findTitle(node) {
+    let el = node;
+    for (let i = 0; i < 6 && el; i++) {
+      const head = el.querySelector ? el.querySelector(".card-header, h4, h3") : null;
+      if (head && head.textContent.trim()) return head.textContent.trim();
+      el = el.parentElement;
+    }
+    if (node._fullLayout && node._fullLayout.title && node._fullLayout.title.text)
+      return node._fullLayout.title.text;
+    return "Visualisasi";
+  }
+
+  // ── util: buat & tempel tombol fullscreen pada sebuah host element ──
+  function makeButton(host, onClick) {
+    if (!host) return;
+    if (host.querySelector(":scope > .viz-fs-btn")) return;  // sudah ada
+    if (getComputedStyle(host).position === "static") host.style.position = "relative";
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "viz-fs-btn";
+    btn.title = "Tampilkan layar penuh";
+    btn.innerHTML = "⛶";
+    btn.addEventListener("click", function (e) {
+      e.preventDefault(); e.stopPropagation(); onClick();
+    });
+    host.appendChild(btn);
+  }
+
+  // ─────────────────────────── PLOTLY ───────────────────────────
+  function attachPlotly(gd) {
+    if (!gd || !gd.classList || !gd.classList.contains("js-plotly-plot")) return;
+    if (gd.id === "vizFsChart") return;
+    makeButton(gd, () => openPlotlyFullscreen(gd));
+  }
+
+  if (hasPlotly) {
+    const origNewPlot = Plotly.newPlot;
+    Plotly.newPlot = function (root) {
+      const res = origNewPlot.apply(this, arguments);
+      const gd = (typeof root === "string") ? document.getElementById(root) : root;
+      const finish = () => attachPlotly(gd);
+      if (res && typeof res.then === "function") res.then(finish, finish);
+      else finish();
+      return res;
+    };
+  }
+
+  function openPlotlyFullscreen(gd) {
+    const dest = prepareOverlay(findTitle(gd), "div");
+    const data   = JSON.parse(JSON.stringify(gd.data   || []));
+    const layout = JSON.parse(JSON.stringify(gd.layout || {}));
+    delete layout.width; delete layout.height;
+    layout.autosize = true;
+    Plotly.newPlot(dest, data, layout, { responsive: true, displayModeBar: true })
+          .then(() => Plotly.Plots.resize(dest));
+  }
+
+  // ─────────────────────────── CHART.JS ─────────────────────────
+  function attachChart(canvas) {
+    if (!canvas || canvas.id === "vizFsCanvas") return;
+    if (!Chart.getChart || !Chart.getChart(canvas)) return;
+    // host = pembungkus terdekat agar tombol tidak menutupi kanvas
+    const host = canvas.parentElement || canvas;
+    makeButton(host, () => openChartFullscreen(canvas));
+  }
+
+  function scanCharts() {
+    if (!hasChart) return;
+    document.querySelectorAll("canvas").forEach(attachChart);
+  }
+
+  function openChartFullscreen(canvas) {
+    const src = Chart.getChart(canvas);
+    if (!src) return;
+    const newCanvas = prepareOverlay(findTitle(canvas), "canvas");
+    // Clone data agar instance fullscreen tidak berbagi _meta dengan chart asli.
+    // Data chart di app ini berisi nilai sederhana sehingga aman di-JSON-clone;
+    // options dipertahankan by-reference karena bisa memuat fungsi callback.
+    let dataClone;
+    try { dataClone = JSON.parse(JSON.stringify(src.config.data)); }
+    catch (e) { dataClone = src.config.data; }
+    const cfg = {
+      type: src.config.type,
+      data: dataClone,
+      options: Object.assign({}, src.config.options, {
+        responsive: true,
+        maintainAspectRatio: false,
+      }),
+    };
+    if (window._vizFsChartInst) { window._vizFsChartInst.destroy(); window._vizFsChartInst = null; }
+    window._vizFsChartInst = new Chart(newCanvas, cfg);
+  }
+
+  // ── overlay umum: siapkan body, kembalikan elemen target render ──
+  function prepareOverlay(title, kind) {
+    const overlay = document.getElementById("vizFsOverlay");
+    const slot = document.getElementById("vizFsBody");
+    document.getElementById("vizFsTitle").textContent = title;
+
+    // bersihkan isi sebelumnya
+    if (window._vizFsChartInst) { window._vizFsChartInst.destroy(); window._vizFsChartInst = null; }
+    if (hasPlotly) { try { Plotly.purge("vizFsChart"); } catch (e) {} }
+    slot.innerHTML = "";
+
+    let target;
+    if (kind === "canvas") {
+      target = document.createElement("canvas");
+      target.id = "vizFsCanvas";
+      const wrap = document.createElement("div");
+      wrap.style.cssText = "width:100%;height:100%;";
+      wrap.appendChild(target);
+      slot.appendChild(wrap);
+    } else {
+      target = document.createElement("div");
+      target.id = "vizFsChart";
+      target.style.cssText = "width:100%;height:100%;";
+      slot.appendChild(target);
+    }
+    overlay.classList.add("open");
+    document.body.style.overflow = "hidden";
+    return target;
+  }
+
+  window.closeVizFullscreen = function () {
+    const overlay = document.getElementById("vizFsOverlay");
+    overlay.classList.remove("open");
+    document.body.style.overflow = "";
+    if (window._vizFsChartInst) { window._vizFsChartInst.destroy(); window._vizFsChartInst = null; }
+    if (hasPlotly) { try { Plotly.purge("vizFsChart"); } catch (e) {} }
+    document.getElementById("vizFsBody").innerHTML = "";
+  };
+
+  // ── pemindaian awal + observer untuk chart yang dirender belakangan ──
+  function scanAll() {
+    if (hasPlotly) document.querySelectorAll(".js-plotly-plot").forEach(attachPlotly);
+    scanCharts();
+  }
+  if (document.readyState === "loading")
+    document.addEventListener("DOMContentLoaded", scanAll);
+  else scanAll();
+  window.addEventListener("load", scanAll);
+
+  // Chart.js & Plotly sering dirender setelah fetch async → pantau perubahan DOM
+  const mo = new MutationObserver(() => {
+    clearTimeout(window._vizFsScanTimer);
+    window._vizFsScanTimer = setTimeout(scanAll, 250);
+  });
+  mo.observe(document.body, { childList: true, subtree: true });
+
+  document.addEventListener("keydown", function (e) {
+    if (e.key === "Escape") closeVizFullscreen();
+  });
+  window.addEventListener("resize", function () {
+    const overlay = document.getElementById("vizFsOverlay");
+    if (!overlay.classList.contains("open")) return;
+    if (hasPlotly) { try { Plotly.Plots.resize("vizFsChart"); } catch (e) {} }
+    if (window._vizFsChartInst) window._vizFsChartInst.resize();
+  });
+})();
+</script>
+</body>
+</html>
