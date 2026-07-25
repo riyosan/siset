@@ -83,7 +83,12 @@ ALLOWED_EXT    = {"xlsx", "xls", "csv"}
 EDA_CACHE_PKL  = os.path.join(MODEL_DIR, "eda_summary.pkl")
 EDA_CACHE_JSON = os.path.join(MODEL_DIR, "eda_summary.json")
 
-app = Flask(__name__)
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+app = Flask(
+    __name__,
+    template_folder=os.path.join(BASE_DIR, "templates"),
+    static_folder=os.path.join(BASE_DIR, "static")
+)
 app.secret_key = "anomali-tesis-secret-2025"
 app.config["UPLOAD_FOLDER"] = UPLOAD_FOLDER
 app.config["MAX_CONTENT_LENGTH"] = 50 * 1024 * 1024   # 50 MB
