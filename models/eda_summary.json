@@ -1,0 +1,1107 @@
+{
+  "ok": true,
+  "ringkasan": {
+    "n_rows": 192621,
+    "n_cols": 38,
+    "n_skpd": 172,
+    "n_pegawai": 1643,
+    "n_masuk": 98137,
+    "n_pulang": 94484,
+    "periode_start": "2025-09-01",
+    "periode_end": "2025-11-28"
+  },
+  "kualitas_raw": {
+    "n_raw": 192621,
+    "n_duplicates": 7244,
+    "n_gps_missing": 0,
+    "n_gps_null_island": 0,
+    "n_gps_out_of_range": 0,
+    "n_gps_total_error": 0,
+    "n_tanggal_invalid": 0,
+    "n_kritis_kosong": 0,
+    "n_jenis_invalid": 0
+  },
+  "dist_jenis": [
+    {
+      "jenis": "Masuk",
+      "jumlah": 98137
+    },
+    {
+      "jenis": "Pulang",
+      "jumlah": 94484
+    }
+  ],
+  "dist_skpd": [
+    {
+      "skpd": "1810",
+      "masuk": 2100,
+      "pulang": 2049,
+      "lainnya": 0,
+      "total": 4149
+    },
+    {
+      "skpd": "1994",
+      "masuk": 2039,
+      "pulang": 2000,
+      "lainnya": 0,
+      "total": 4039
+    },
+    {
+      "skpd": "1855",
+      "masuk": 1869,
+      "pulang": 1761,
+      "lainnya": 0,
+      "total": 3630
+    },
+    {
+      "skpd": "1823",
+      "masuk": 1794,
+      "pulang": 1724,
+      "lainnya": 0,
+      "total": 3518
+    },
+    {
+      "skpd": "2007",
+      "masuk": 1746,
+      "pulang": 1689,
+      "lainnya": 0,
+      "total": 3435
+    },
+    {
+      "skpd": "1975",
+      "masuk": 1633,
+      "pulang": 1599,
+      "lainnya": 0,
+      "total": 3232
+    },
+    {
+      "skpd": "1908",
+      "masuk": 1661,
+      "pulang": 1560,
+      "lainnya": 0,
+      "total": 3221
+    },
+    {
+      "skpd": "1961",
+      "masuk": 1497,
+      "pulang": 1440,
+      "lainnya": 0,
+      "total": 2937
+    },
+    {
+      "skpd": "1792",
+      "masuk": 1410,
+      "pulang": 1376,
+      "lainnya": 0,
+      "total": 2786
+    },
+    {
+      "skpd": "1868",
+      "masuk": 1288,
+      "pulang": 1233,
+      "lainnya": 0,
+      "total": 2521
+    },
+    {
+      "skpd": "1839",
+      "masuk": 1272,
+      "pulang": 1248,
+      "lainnya": 0,
+      "total": 2520
+    },
+    {
+      "skpd": "2051",
+      "masuk": 1271,
+      "pulang": 1228,
+      "lainnya": 0,
+      "total": 2499
+    },
+    {
+      "skpd": "2020",
+      "masuk": 1171,
+      "pulang": 1164,
+      "lainnya": 0,
+      "total": 2335
+    },
+    {
+      "skpd": "1779",
+      "masuk": 1168,
+      "pulang": 1144,
+      "lainnya": 0,
+      "total": 2312
+    },
+    {
+      "skpd": "1922",
+      "masuk": 1154,
+      "pulang": 1134,
+      "lainnya": 0,
+      "total": 2288
+    }
+  ],
+  "tren_harian": [
+    {
+      "tanggal": "2025-09-01",
+      "masuk": 1610,
+      "pulang": 1561,
+      "lainnya": 0,
+      "total": 3171
+    },
+    {
+      "tanggal": "2025-09-02",
+      "masuk": 1592,
+      "pulang": 1582,
+      "lainnya": 0,
+      "total": 3174
+    },
+    {
+      "tanggal": "2025-09-03",
+      "masuk": 1603,
+      "pulang": 1605,
+      "lainnya": 0,
+      "total": 3208
+    },
+    {
+      "tanggal": "2025-09-04",
+      "masuk": 1602,
+      "pulang": 1578,
+      "lainnya": 0,
+      "total": 3180
+    },
+    {
+      "tanggal": "2025-09-08",
+      "masuk": 1592,
+      "pulang": 1557,
+      "lainnya": 0,
+      "total": 3149
+    },
+    {
+      "tanggal": "2025-09-09",
+      "masuk": 1527,
+      "pulang": 1580,
+      "lainnya": 0,
+      "total": 3107
+    },
+    {
+      "tanggal": "2025-09-10",
+      "masuk": 1597,
+      "pulang": 1595,
+      "lainnya": 0,
+      "total": 3192
+    },
+    {
+      "tanggal": "2025-09-11",
+      "masuk": 1594,
+      "pulang": 1573,
+      "lainnya": 0,
+      "total": 3167
+    },
+    {
+      "tanggal": "2025-09-12",
+      "masuk": 1525,
+      "pulang": 1516,
+      "lainnya": 0,
+      "total": 3041
+    },
+    {
+      "tanggal": "2025-09-15",
+      "masuk": 1571,
+      "pulang": 1539,
+      "lainnya": 0,
+      "total": 3110
+    },
+    {
+      "tanggal": "2025-09-16",
+      "masuk": 1601,
+      "pulang": 1577,
+      "lainnya": 0,
+      "total": 3178
+    },
+    {
+      "tanggal": "2025-09-17",
+      "masuk": 1600,
+      "pulang": 1592,
+      "lainnya": 0,
+      "total": 3192
+    },
+    {
+      "tanggal": "2025-09-18",
+      "masuk": 1601,
+      "pulang": 1555,
+      "lainnya": 0,
+      "total": 3156
+    },
+    {
+      "tanggal": "2025-09-19",
+      "masuk": 1565,
+      "pulang": 1564,
+      "lainnya": 0,
+      "total": 3129
+    },
+    {
+      "tanggal": "2025-09-22",
+      "masuk": 1585,
+      "pulang": 1553,
+      "lainnya": 0,
+      "total": 3138
+    },
+    {
+      "tanggal": "2025-09-23",
+      "masuk": 1574,
+      "pulang": 1572,
+      "lainnya": 0,
+      "total": 3146
+    },
+    {
+      "tanggal": "2025-09-24",
+      "masuk": 1599,
+      "pulang": 1583,
+      "lainnya": 0,
+      "total": 3182
+    },
+    {
+      "tanggal": "2025-09-25",
+      "masuk": 1609,
+      "pulang": 1583,
+      "lainnya": 0,
+      "total": 3192
+    },
+    {
+      "tanggal": "2025-09-26",
+      "masuk": 1570,
+      "pulang": 1536,
+      "lainnya": 0,
+      "total": 3106
+    },
+    {
+      "tanggal": "2025-09-29",
+      "masuk": 1598,
+      "pulang": 1581,
+      "lainnya": 0,
+      "total": 3179
+    },
+    {
+      "tanggal": "2025-09-30",
+      "masuk": 1596,
+      "pulang": 1565,
+      "lainnya": 0,
+      "total": 3161
+    },
+    {
+      "tanggal": "2025-10-01",
+      "masuk": 1547,
+      "pulang": 1534,
+      "lainnya": 0,
+      "total": 3081
+    },
+    {
+      "tanggal": "2025-10-02",
+      "masuk": 1589,
+      "pulang": 1556,
+      "lainnya": 0,
+      "total": 3145
+    },
+    {
+      "tanggal": "2025-10-03",
+      "masuk": 1477,
+      "pulang": 1462,
+      "lainnya": 0,
+      "total": 2939
+    },
+    {
+      "tanggal": "2025-10-06",
+      "masuk": 1564,
+      "pulang": 1526,
+      "lainnya": 0,
+      "total": 3090
+    },
+    {
+      "tanggal": "2025-10-07",
+      "masuk": 1568,
+      "pulang": 1533,
+      "lainnya": 0,
+      "total": 3101
+    },
+    {
+      "tanggal": "2025-10-08",
+      "masuk": 1578,
+      "pulang": 1552,
+      "lainnya": 0,
+      "total": 3130
+    },
+    {
+      "tanggal": "2025-10-09",
+      "masuk": 1584,
+      "pulang": 1536,
+      "lainnya": 0,
+      "total": 3120
+    },
+    {
+      "tanggal": "2025-10-10",
+      "masuk": 1584,
+      "pulang": 1540,
+      "lainnya": 0,
+      "total": 3124
+    },
+    {
+      "tanggal": "2025-10-13",
+      "masuk": 1558,
+      "pulang": 1512,
+      "lainnya": 0,
+      "total": 3070
+    },
+    {
+      "tanggal": "2025-10-14",
+      "masuk": 1559,
+      "pulang": 1515,
+      "lainnya": 0,
+      "total": 3074
+    },
+    {
+      "tanggal": "2025-10-15",
+      "masuk": 1577,
+      "pulang": 1526,
+      "lainnya": 0,
+      "total": 3103
+    },
+    {
+      "tanggal": "2025-10-16",
+      "masuk": 1524,
+      "pulang": 1513,
+      "lainnya": 0,
+      "total": 3037
+    },
+    {
+      "tanggal": "2025-10-17",
+      "masuk": 1540,
+      "pulang": 1504,
+      "lainnya": 0,
+      "total": 3044
+    },
+    {
+      "tanggal": "2025-10-20",
+      "masuk": 1538,
+      "pulang": 1505,
+      "lainnya": 0,
+      "total": 3043
+    },
+    {
+      "tanggal": "2025-10-21",
+      "masuk": 1542,
+      "pulang": 1531,
+      "lainnya": 0,
+      "total": 3073
+    },
+    {
+      "tanggal": "2025-10-22",
+      "masuk": 1449,
+      "pulang": 1447,
+      "lainnya": 0,
+      "total": 2896
+    },
+    {
+      "tanggal": "2025-10-23",
+      "masuk": 1575,
+      "pulang": 1555,
+      "lainnya": 0,
+      "total": 3130
+    },
+    {
+      "tanggal": "2025-10-24",
+      "masuk": 1602,
+      "pulang": 1579,
+      "lainnya": 0,
+      "total": 3181
+    },
+    {
+      "tanggal": "2025-10-27",
+      "masuk": 1744,
+      "pulang": 5,
+      "lainnya": 0,
+      "total": 1749
+    },
+    {
+      "tanggal": "2025-10-28",
+      "masuk": 1704,
+      "pulang": 1657,
+      "lainnya": 0,
+      "total": 3361
+    },
+    {
+      "tanggal": "2025-10-29",
+      "masuk": 1650,
+      "pulang": 1617,
+      "lainnya": 0,
+      "total": 3267
+    },
+    {
+      "tanggal": "2025-10-30",
+      "masuk": 1627,
+      "pulang": 1579,
+      "lainnya": 0,
+      "total": 3206
+    },
+    {
+      "tanggal": "2025-11-03",
+      "masuk": 1589,
+      "pulang": 1485,
+      "lainnya": 0,
+      "total": 3074
+    },
+    {
+      "tanggal": "2025-11-04",
+      "masuk": 1570,
+      "pulang": 1542,
+      "lainnya": 0,
+      "total": 3112
+    },
+    {
+      "tanggal": "2025-11-05",
+      "masuk": 1557,
+      "pulang": 1522,
+      "lainnya": 0,
+      "total": 3079
+    },
+    {
+      "tanggal": "2025-11-06",
+      "masuk": 1563,
+      "pulang": 1531,
+      "lainnya": 0,
+      "total": 3094
+    },
+    {
+      "tanggal": "2025-11-07",
+      "masuk": 1522,
+      "pulang": 1527,
+      "lainnya": 0,
+      "total": 3049
+    },
+    {
+      "tanggal": "2025-11-10",
+      "masuk": 1558,
+      "pulang": 1524,
+      "lainnya": 0,
+      "total": 3082
+    },
+    {
+      "tanggal": "2025-11-11",
+      "masuk": 1543,
+      "pulang": 1512,
+      "lainnya": 0,
+      "total": 3055
+    },
+    {
+      "tanggal": "2025-11-12",
+      "masuk": 1563,
+      "pulang": 1457,
+      "lainnya": 0,
+      "total": 3020
+    },
+    {
+      "tanggal": "2025-11-13",
+      "masuk": 1541,
+      "pulang": 1524,
+      "lainnya": 0,
+      "total": 3065
+    },
+    {
+      "tanggal": "2025-11-14",
+      "masuk": 1526,
+      "pulang": 1509,
+      "lainnya": 0,
+      "total": 3035
+    },
+    {
+      "tanggal": "2025-11-17",
+      "masuk": 1556,
+      "pulang": 1521,
+      "lainnya": 0,
+      "total": 3077
+    },
+    {
+      "tanggal": "2025-11-18",
+      "masuk": 1532,
+      "pulang": 1514,
+      "lainnya": 0,
+      "total": 3046
+    },
+    {
+      "tanggal": "2025-11-19",
+      "masuk": 1545,
+      "pulang": 1522,
+      "lainnya": 0,
+      "total": 3067
+    },
+    {
+      "tanggal": "2025-11-20",
+      "masuk": 1543,
+      "pulang": 1454,
+      "lainnya": 0,
+      "total": 2997
+    },
+    {
+      "tanggal": "2025-11-21",
+      "masuk": 1556,
+      "pulang": 1518,
+      "lainnya": 0,
+      "total": 3074
+    },
+    {
+      "tanggal": "2025-11-24",
+      "masuk": 1457,
+      "pulang": 1410,
+      "lainnya": 0,
+      "total": 2867
+    },
+    {
+      "tanggal": "2025-11-25",
+      "masuk": 1441,
+      "pulang": 1454,
+      "lainnya": 0,
+      "total": 2895
+    },
+    {
+      "tanggal": "2025-11-26",
+      "masuk": 1520,
+      "pulang": 1492,
+      "lainnya": 0,
+      "total": 3012
+    },
+    {
+      "tanggal": "2025-11-27",
+      "masuk": 1341,
+      "pulang": 1049,
+      "lainnya": 0,
+      "total": 2390
+    },
+    {
+      "tanggal": "2025-11-28",
+      "masuk": 1123,
+      "pulang": 1186,
+      "lainnya": 0,
+      "total": 2309
+    }
+  ],
+  "dist_jam": [
+    {
+      "jam": "00:00",
+      "masuk": 0,
+      "pulang": 0,
+      "lainnya": 0,
+      "total": 0
+    },
+    {
+      "jam": "01:00",
+      "masuk": 0,
+      "pulang": 0,
+      "lainnya": 0,
+      "total": 0
+    },
+    {
+      "jam": "02:00",
+      "masuk": 0,
+      "pulang": 0,
+      "lainnya": 0,
+      "total": 0
+    },
+    {
+      "jam": "03:00",
+      "masuk": 0,
+      "pulang": 0,
+      "lainnya": 0,
+      "total": 0
+    },
+    {
+      "jam": "04:00",
+      "masuk": 0,
+      "pulang": 0,
+      "lainnya": 0,
+      "total": 0
+    },
+    {
+      "jam": "05:00",
+      "masuk": 0,
+      "pulang": 0,
+      "lainnya": 0,
+      "total": 0
+    },
+    {
+      "jam": "06:00",
+      "masuk": 0,
+      "pulang": 1,
+      "lainnya": 0,
+      "total": 1
+    },
+    {
+      "jam": "07:00",
+      "masuk": 42277,
+      "pulang": 2,
+      "lainnya": 0,
+      "total": 42279
+    },
+    {
+      "jam": "08:00",
+      "masuk": 54764,
+      "pulang": 0,
+      "lainnya": 0,
+      "total": 54764
+    },
+    {
+      "jam": "09:00",
+      "masuk": 742,
+      "pulang": 0,
+      "lainnya": 0,
+      "total": 742
+    },
+    {
+      "jam": "10:00",
+      "masuk": 219,
+      "pulang": 0,
+      "lainnya": 0,
+      "total": 219
+    },
+    {
+      "jam": "11:00",
+      "masuk": 108,
+      "pulang": 0,
+      "lainnya": 0,
+      "total": 108
+    },
+    {
+      "jam": "12:00",
+      "masuk": 1,
+      "pulang": 14,
+      "lainnya": 0,
+      "total": 15
+    },
+    {
+      "jam": "13:00",
+      "masuk": 0,
+      "pulang": 9,
+      "lainnya": 0,
+      "total": 9
+    },
+    {
+      "jam": "14:00",
+      "masuk": 0,
+      "pulang": 20,
+      "lainnya": 0,
+      "total": 20
+    },
+    {
+      "jam": "15:00",
+      "masuk": 0,
+      "pulang": 40,
+      "lainnya": 0,
+      "total": 40
+    },
+    {
+      "jam": "16:00",
+      "masuk": 23,
+      "pulang": 78083,
+      "lainnya": 0,
+      "total": 78106
+    },
+    {
+      "jam": "17:00",
+      "masuk": 3,
+      "pulang": 16315,
+      "lainnya": 0,
+      "total": 16318
+    },
+    {
+      "jam": "18:00",
+      "masuk": 0,
+      "pulang": 0,
+      "lainnya": 0,
+      "total": 0
+    },
+    {
+      "jam": "19:00",
+      "masuk": 0,
+      "pulang": 0,
+      "lainnya": 0,
+      "total": 0
+    },
+    {
+      "jam": "20:00",
+      "masuk": 0,
+      "pulang": 0,
+      "lainnya": 0,
+      "total": 0
+    },
+    {
+      "jam": "21:00",
+      "masuk": 0,
+      "pulang": 0,
+      "lainnya": 0,
+      "total": 0
+    },
+    {
+      "jam": "22:00",
+      "masuk": 0,
+      "pulang": 0,
+      "lainnya": 0,
+      "total": 0
+    },
+    {
+      "jam": "23:00",
+      "masuk": 0,
+      "pulang": 0,
+      "lainnya": 0,
+      "total": 0
+    }
+  ],
+  "dist_jarak": [
+    {
+      "bin": "0–1km",
+      "masuk": 91923,
+      "pulang": 88394,
+      "lainnya": 0,
+      "total": 180317
+    },
+    {
+      "bin": "1–2km",
+      "masuk": 1278,
+      "pulang": 786,
+      "lainnya": 0,
+      "total": 2064
+    },
+    {
+      "bin": "2–3km",
+      "masuk": 1860,
+      "pulang": 1441,
+      "lainnya": 0,
+      "total": 3301
+    },
+    {
+      "bin": "3–4km",
+      "masuk": 814,
+      "pulang": 740,
+      "lainnya": 0,
+      "total": 1554
+    },
+    {
+      "bin": "4–5km",
+      "masuk": 608,
+      "pulang": 627,
+      "lainnya": 0,
+      "total": 1235
+    },
+    {
+      "bin": "5–6km",
+      "masuk": 216,
+      "pulang": 406,
+      "lainnya": 0,
+      "total": 622
+    },
+    {
+      "bin": "6–7km",
+      "masuk": 229,
+      "pulang": 345,
+      "lainnya": 0,
+      "total": 574
+    },
+    {
+      "bin": "7–8km",
+      "masuk": 225,
+      "pulang": 269,
+      "lainnya": 0,
+      "total": 494
+    },
+    {
+      "bin": "8–9km",
+      "masuk": 118,
+      "pulang": 143,
+      "lainnya": 0,
+      "total": 261
+    },
+    {
+      "bin": "9–10km",
+      "masuk": 83,
+      "pulang": 130,
+      "lainnya": 0,
+      "total": 213
+    },
+    {
+      "bin": ">10km",
+      "masuk": 774,
+      "pulang": 1195,
+      "lainnya": 0,
+      "total": 1969
+    }
+  ],
+  "dist_kelengkapan": [
+    {
+      "status": "Lengkap M+P",
+      "jumlah": 89467
+    },
+    {
+      "status": "Hanya Masuk",
+      "jumlah": 4829
+    },
+    {
+      "status": "Hanya Pulang",
+      "jumlah": 1614
+    }
+  ],
+  "missing_vals": [
+    {
+      "kolom": "status",
+      "jumlah": 192621,
+      "pct": 100.0
+    },
+    {
+      "kolom": "catatan_penolakan",
+      "jumlah": 191677,
+      "pct": 99.51
+    },
+    {
+      "kolom": "catatan",
+      "jumlah": 178671,
+      "pct": 92.76
+    },
+    {
+      "kolom": "status_presensi",
+      "jumlah": 126363,
+      "pct": 65.6
+    },
+    {
+      "kolom": "instansi_id",
+      "jumlah": 126363,
+      "pct": 65.6
+    },
+    {
+      "kolom": "id_skpd_bkn",
+      "jumlah": 126363,
+      "pct": 65.6
+    },
+    {
+      "kolom": "jarak_keterangan",
+      "jumlah": 79428,
+      "pct": 41.24
+    },
+    {
+      "kolom": "approver_status",
+      "jumlah": 557,
+      "pct": 0.29
+    },
+    {
+      "kolom": "approver_at",
+      "jumlah": 557,
+      "pct": 0.29
+    },
+    {
+      "kolom": "approver_id",
+      "jumlah": 557,
+      "pct": 0.29
+    },
+    {
+      "kolom": "message",
+      "jumlah": 8,
+      "pct": 0.0
+    },
+    {
+      "kolom": "karyawan_id",
+      "jumlah": 0,
+      "pct": 0.0
+    },
+    {
+      "kolom": "id",
+      "jumlah": 0,
+      "pct": 0.0
+    },
+    {
+      "kolom": "lat",
+      "jumlah": 0,
+      "pct": 0.0
+    },
+    {
+      "kolom": "jenis",
+      "jumlah": 0,
+      "pct": 0.0
+    },
+    {
+      "kolom": "tanggal_kirim",
+      "jumlah": 0,
+      "pct": 0.0
+    },
+    {
+      "kolom": "masuk_post_time",
+      "jumlah": 0,
+      "pct": 0.0
+    },
+    {
+      "kolom": "masuk_max_time",
+      "jumlah": 0,
+      "pct": 0.0
+    },
+    {
+      "kolom": "long",
+      "jumlah": 0,
+      "pct": 0.0
+    },
+    {
+      "kolom": "masuk_pre_time",
+      "jumlah": 0,
+      "pct": 0.0
+    },
+    {
+      "kolom": "status_lokasi",
+      "jumlah": 0,
+      "pct": 0.0
+    },
+    {
+      "kolom": "shift_id",
+      "jumlah": 0,
+      "pct": 0.0
+    },
+    {
+      "kolom": "pulang_post_time",
+      "jumlah": 0,
+      "pct": 0.0
+    },
+    {
+      "kolom": "pulang_pre_time",
+      "jumlah": 0,
+      "pct": 0.0
+    },
+    {
+      "kolom": "jarak",
+      "jumlah": 0,
+      "pct": 0.0
+    },
+    {
+      "kolom": "is_admin_device",
+      "jumlah": 0,
+      "pct": 0.0
+    },
+    {
+      "kolom": "tanggal_masuk",
+      "jumlah": 0,
+      "pct": 0.0
+    },
+    {
+      "kolom": "jam_masuk",
+      "jumlah": 0,
+      "pct": 0.0
+    },
+    {
+      "kolom": "imei",
+      "jumlah": 0,
+      "pct": 0.0
+    },
+    {
+      "kolom": "jam_pulang",
+      "jumlah": 0,
+      "pct": 0.0
+    },
+    {
+      "kolom": "created_at",
+      "jumlah": 0,
+      "pct": 0.0
+    },
+    {
+      "kolom": "appversion",
+      "jumlah": 0,
+      "pct": 0.0
+    },
+    {
+      "kolom": "updated_at",
+      "jumlah": 0,
+      "pct": 0.0
+    },
+    {
+      "kolom": "nama_skpd",
+      "jumlah": 0,
+      "pct": 0.0
+    },
+    {
+      "kolom": "id_skpd",
+      "jumlah": 0,
+      "pct": 0.0
+    },
+    {
+      "kolom": "lat_kantor",
+      "jumlah": 0,
+      "pct": 0.0
+    },
+    {
+      "kolom": "long_kantor",
+      "jumlah": 0,
+      "pct": 0.0
+    }
+  ],
+  "dist_catatan": [
+    {
+      "kategori": "Dinas",
+      "total": 9862
+    },
+    {
+      "kategori": "Lainnya",
+      "total": 2117
+    },
+    {
+      "kategori": "Alasan_Pribadi",
+      "total": 1428
+    },
+    {
+      "kategori": "Kendala_Teknis",
+      "total": 308
+    },
+    {
+      "kategori": "Tidak_Ada_Catatan",
+      "total": 235
+    }
+  ],
+  "dist_hari": [
+    {
+      "hari": "Senin",
+      "masuk": 20520,
+      "pulang": 18279,
+      "lainnya": 0,
+      "total": 38799
+    },
+    {
+      "hari": "Selasa",
+      "masuk": 20349,
+      "pulang": 20134,
+      "lainnya": 0,
+      "total": 40483
+    },
+    {
+      "hari": "Rabu",
+      "masuk": 20385,
+      "pulang": 20044,
+      "lainnya": 0,
+      "total": 40429
+    },
+    {
+      "hari": "Kamis",
+      "masuk": 20293,
+      "pulang": 19586,
+      "lainnya": 0,
+      "total": 39879
+    },
+    {
+      "hari": "Jumat",
+      "masuk": 16590,
+      "pulang": 16441,
+      "lainnya": 0,
+      "total": 33031
+    },
+    {
+      "hari": "Sabtu",
+      "masuk": 0,
+      "pulang": 0,
+      "lainnya": 0,
+      "total": 0
+    },
+    {
+      "hari": "Minggu",
+      "masuk": 0,
+      "pulang": 0,
+      "lainnya": 0,
+      "total": 0
+    }
+  ]
+}

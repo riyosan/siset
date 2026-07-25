@@ -1,0 +1,8 @@
+models/*.pkl
+models/*.npy
+models/*.xlsx
+uploads/*.xlsx
+uploads/*.csv
+__pycache__/
+.venv/
+*.zip
