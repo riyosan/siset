@@ -9,3 +9,4 @@ shap>=0.45,<1.0
 plotly>=5.20,<7.0
 openpyxl>=3.1,<4.0
 xlrd>=2.0,<3.0
+gunicorn>=21.2.0
