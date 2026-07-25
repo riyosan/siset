@@ -32,42 +32,25 @@
 ║  TAHAP 20 │ SHAP Interpretability            [NB Cell 10]        ║
 ╚══════════════════════════════════════════════════════════════════╝
 """
-╔══════════════════════════════════════════════════════════════════╗
-║  Sistem Deteksi Anomali Presensi Pegawai                        ║
-║  Flask Application                                               ║
-║                                                                  ║
-║  URUTAN PIPELINE PREPROCESSING:                                  ║
-║                                                                  ║
-║  [ST]  = diadopsi dari web Streamlit analisis absensi            ║
-║  [NB]  = dari notebook tesisv2_fixed.ipynb                       ║
-║                                                                  ║
-║  TAHAP 0A │ Fix Format Desimal               [ST]                ║
-║  TAHAP 0B │ Deduplikasi Relasional           [ST]                ║
-║  TAHAP 1  │ Mapping & Normalisasi Status     [ST]                ║
-║  TAHAP 2  │ Data Cleaning GPS & Missing      [NB Cell 5]         ║
-║  TAHAP 3  │ Type Conversion & Label Pseudo   [NB Cell 6]         ║
-║  TAHAP 4  │ Feature Engineering Waktu        [ST]                ║
-║  TAHAP 5  │ Coordinate Transformation        [NB Cell 7A]        ║
-║  TAHAP 6  │ ST-DBSCAN -> Centroid Kantor      [NB Cell 7B]        ║
-║  TAHAP 7  │ Feature Geospasial Lanjutan      [ST + NB]           ║
-║  TAHAP 8  │ Feature Deviasi Waktu            [ST]                ║
-║  TAHAP 9  │ Feature Agregat per Karyawan     [ST]                ║
-║  TAHAP 10 │ OHE shift_id                     [NB Cell 7C]        ║
-║  TAHAP 11 │ OHE jenis & status_presensi      [NB Cell 8]         ║
-║  TAHAP 12 │ Klasifikasi Catatan + OHE        [NB Cell 8.0]       ║
-║  TAHAP 13 │ Seleksi Fitur Model              [NB]                ║
-║  TAHAP 14 │ Impute NaN + RobustScaler        [NB Cell 9A]        ║
-║  TAHAP 15 │ Isolation Forest                 [NB Cell 9B]        ║
-║  TAHAP 16 │ Local Outlier Factor             [NB Cell 9C]        ║
-║  TAHAP 17 │ ECOD                             [NB Cell 9D]        ║
-║  TAHAP 18 │ Ensemble Majority Voting         [NB Cell 9E]        ║
-║  TAHAP 19 │ Evaluasi Metrik                  [NB Cell 9F]        ║
-║  TAHAP 20 │ SHAP Interpretability            [NB Cell 10]        ║
-╚══════════════════════════════════════════════════════════════════╝
-"""
 
 import os, io, re, pickle, warnings, sys, time, threading
-    sys.stdout.reconfigure(encoding='utf-8')
+import numpy as np
+import pandas as pd
+from flask import Flask, render_template, request, jsonify, send_file
+try:
+    import plotly.express as px
+    import plotly.utils
+except Exception:
+    px = None
+import json
+from werkzeug.utils import secure_filename
+
+# Fix for charmap encoding error on Windows console when printing emojis/arrows
+try:
+    if hasattr(sys.stdout, 'reconfigure') and sys.stdout.encoding and sys.stdout.encoding.lower() != 'utf-8':
+        sys.stdout.reconfigure(encoding='utf-8')
+except Exception:
+    pass
 
 warnings.filterwarnings('ignore')
 
@@ -540,201 +523,6 @@ def run_preprocessing_and_prediction(df_raw):
         X_scaled        — array fitur setelah RobustScaler
     """
     from sklearn.preprocessing import RobustScaler
-def resolve_ambiguous_status(df):
-    """
-    [TAHAP 1 - ST] Resolve status ambigu 'TELAT' dan 'PULANG':
-
-    'TELAT':
-      -> Gunakan kolom 'jenis' (M/P) untuk membedakan masuk vs pulang
-      -> Jika tidak ada kolom jenis -> default TEPAT_WAKTU_MASUK
-
-    'PULANG':
-      -> Gunakan jam_desimal: < 14 -> PULANG_CEPAT_BERAT, ≥ 14 -> PULANG_CEPAT_SEDANG
-      -> Jika tidak ada jam_desimal -> default PULANG_CEPAT_SEDANG
-
-    Return: (df_updated, list_log_message)
-    """
-    logs = []
-
-    # ── Resolve 'TELAT' ──────────────────────────────────────
-    mask_telat = df["status_presensi"] == "TELAT"
-    if mask_telat.any():
-        n = mask_telat.sum()
-        if "jenis" in df.columns:
-            df.loc[mask_telat & (df["jenis"] == "M"), "status_presensi"] = "TEPAT_WAKTU_MASUK"
-            df.loc[mask_telat & (df["jenis"] == "P"), "status_presensi"] = "TEPAT_WAKTU_PULANG"
-            # Sisa yang belum ter-resolve (jenis bukan M/P) -> default masuk
-            df.loc[df["status_presensi"] == "TELAT", "status_presensi"] = "TEPAT_WAKTU_MASUK"
-        else:
-            df.loc[mask_telat, "status_presensi"] = "TEPAT_WAKTU_MASUK"
-        logs.append(f"Resolve 'TELAT' ({n} baris) -> TEPAT_WAKTU via kolom jenis")
-
-    # ── Resolve 'PULANG' ─────────────────────────────────────
-    mask_pulang = df["status_presensi"] == "PULANG"
-    if mask_pulang.any():
-        n = mask_pulang.sum()
-        if "jam_desimal" in df.columns:
-            df.loc[mask_pulang & (df["jam_desimal"] >= 14), "status_presensi"] = "PULANG_CEPAT_SEDANG"
-            df.loc[mask_pulang & (df["jam_desimal"] <  14), "status_presensi"] = "PULANG_CEPAT_BERAT"
-            df.loc[df["status_presensi"] == "PULANG", "status_presensi"]       = "PULANG_CEPAT_SEDANG"
-        else:
-            df.loc[mask_pulang, "status_presensi"] = "PULANG_CEPAT_SEDANG"
-        logs.append(f"Resolve 'PULANG' ({n} baris) -> PULANG_CEPAT via jam_desimal")
-
-    return df, logs
-
-
-def derive_status_dari_jam(jam_desimal, jenis):
-    """
-    [TAHAP 1 - ST] Fallback: derive status dari jam_desimal + jenis
-    dipakai ketika status_presensi = UNKNOWN atau kolom tidak ada.
-
-    Aturan MASUK (jenis='M'):
-      ≤ 08:15 -> TEPAT_WAKTU_MASUK
-      08:16–08:45 -> TELAT_MASUK_RINGAN
-      08:46–09:15 -> TELAT_MASUK_SEDANG
-      09:16–09:45 -> TELAT_MASUK_BERAT
-      > 09:45     -> TELAT_MASUK_SANGAT_BERAT
-
-    Aturan PULANG (jenis='P'):
-      ≥ 16:00 -> TEPAT_WAKTU_PULANG
-      15:30–15:59 -> PULANG_CEPAT
-      15:00–15:29 -> PULANG_CEPAT_RINGAN
-      14:00–14:59 -> PULANG_CEPAT_SEDANG
-      < 14:00     -> PULANG_CEPAT_BERAT
-    """
-    if jenis == "M":
-        if jam_desimal <= 8.25:   return "TEPAT_WAKTU_MASUK"
-        elif jam_desimal <= 8.75: return "TELAT_MASUK_RINGAN"
-        elif jam_desimal <= 9.25: return "TELAT_MASUK_SEDANG"
-        elif jam_desimal <= 9.75: return "TELAT_MASUK_BERAT"
-        else:                     return "TELAT_MASUK_SANGAT_BERAT"
-    else:
-        if jam_desimal >= 16.0:   return "TEPAT_WAKTU_PULANG"
-        elif jam_desimal >= 15.5: return "PULANG_CEPAT"
-        elif jam_desimal >= 15.0: return "PULANG_CEPAT_RINGAN"
-        elif jam_desimal >= 14.0: return "PULANG_CEPAT_SEDANG"
-        else:                     return "PULANG_CEPAT_BERAT"
-
-
-def fix_decimal_columns(df):
-    """
-    [TAHAP 0A - ST] Deteksi dan perbaiki kolom yang menggunakan koma
-    sebagai pemisah desimal (format lokal Indonesia -> format float Python).
-    Contoh: '3,14' -> 3.14, '-6,89' -> -6.89
-
-    Strategi:
-    1. Kolom dengan nama hint numerik -> langsung konversi
-    2. Kolom lain -> sampling: jika >70% berbentuk angka,koma,angka -> konversi
-    """
-    numeric_hints = [
-        "lat", "long", "lat_rad", "long_rad", "office_lat", "office_long",
-        "dist_km", "jarak", "jam_desimal", "jam", "menit", "weekday",
-        "outside_100m", "very_far", "status_lokasi", "timestamp_num",
-    ]
-    fixed = []
-    for col in df.columns:
-        if df[col].dtype != object:
-            continue
-        if col in numeric_hints:
-            try:
-                df[col] = pd.to_numeric(
-                    df[col].astype(str).str.replace(",", ".", regex=False).str.strip(),
-                    errors="coerce")
-                fixed.append(col)
-            except Exception:
-                pass
-        else:
-            # Auto-detect: cek apakah mayoritas nilai berbentuk digit,koma,digit
-            sample = df[col].dropna().head(20).astype(str)
-            if sample.str.match(r"^-?\d+,\d+$").mean() > 0.7:
-                try:
-                    df[col] = pd.to_numeric(
-                        df[col].astype(str).str.replace(",", ".", regex=False),
-                        errors="coerce")
-                    fixed.append(col)
-                except Exception:
-                    pass
-    return df, fixed
-
-
-# ══════════════════════════════════════════════════════════════════
-#  CEK & LOAD MODEL
-# ══════════════════════════════════════════════════════════════════
-
-def models_exist():
-    """Cek apakah semua file .pkl model sudah tersimpan di disk."""
-    required = [
-        "if_model.pkl", "lof_model.pkl", "ecod_model.pkl",
-        "scaler.pkl", "shap_values.npy", "expected_val.pkl",
-        "feature_names.pkl", "df_hasil.pkl", "X_scaled.npy",
-        "results.pkl", "office_centroids.pkl",
-    ]
-    return all(os.path.exists(os.path.join(MODEL_DIR, f)) for f in required)
-
-
-def get_last_processed():
-    """Ambil timestamp terakhir data diproses dari mtime file df_hasil.pkl."""
-    f = os.path.join(MODEL_DIR, "df_hasil.pkl")
-    if not os.path.exists(f):
-        return None
-    import datetime
-    ts = os.path.getmtime(f)
-    return datetime.datetime.fromtimestamp(ts).strftime("%d %b %Y, %H:%M")
-
-
-def load_models():
-    """
-    Load semua model dan data hasil dari disk.
-    Dipanggil setiap kali endpoint API membutuhkan data.
-    """
-    d = MODEL_DIR
-    with open(f"{d}/if_model.pkl",         "rb") as f: IF_MODEL         = pickle.load(f)
-    with open(f"{d}/lof_model.pkl",        "rb") as f: LOF_MODEL        = pickle.load(f)
-    with open(f"{d}/ecod_model.pkl",       "rb") as f: ECOD_MODEL       = pickle.load(f)
-    with open(f"{d}/scaler.pkl",           "rb") as f: scaler           = pickle.load(f)
-    with open(f"{d}/expected_val.pkl",     "rb") as f: expected_val     = pickle.load(f)
-    with open(f"{d}/feature_names.pkl",    "rb") as f: feature_names    = pickle.load(f)
-    with open(f"{d}/results.pkl",          "rb") as f: results          = pickle.load(f)
-    with open(f"{d}/office_centroids.pkl", "rb") as f: office_centroids = pickle.load(f)
-    shap_values = np.load(f"{d}/shap_values.npy", allow_pickle=True)
-    X_scaled    = np.load(f"{d}/X_scaled.npy",    allow_pickle=True)
-    df          = pd.read_pickle(f"{d}/df_hasil.pkl")
-    return (IF_MODEL, LOF_MODEL, ECOD_MODEL, scaler,
-            shap_values, expected_val, feature_names,
-            results, office_centroids, X_scaled, df)
-
-
-def load_raw_df():
-    """Load df_raw.pkl dari disk."""
-    raw_path = os.path.join(MODEL_DIR, "df_raw.pkl")
-    if os.path.exists(raw_path):
-        try:
-            return pd.read_pickle(raw_path)
-        except Exception:
-            pass
-    return None
-
-
-# ══════════════════════════════════════════════════════════════════
-#  PIPELINE UTAMA: PREPROCESSING + PREDIKSI
-# ══════════════════════════════════════════════════════════════════
-
-def run_preprocessing_and_prediction(df_raw):
-    """
-    Menjalankan seluruh pipeline dari data mentah -> model tersimpan.
-    Setiap tahap diberi komentar tracking: [TAHAP X] di terminal.
-
-    Return:
-        df              — DataFrame hasil lengkap dengan semua kolom
-        shap_values     — array SHAP (n_samples × n_features)
-        expected_val    — baseline SHAP (mean expected value IF)
-        feature_names   — list nama fitur yang masuk model
-        results         — dict metrik evaluasi (IF, LOF, ECOD, Ensemble)
-        office_centroids— DataFrame centroid kantor per SKPD
-        X_scaled        — array fitur setelah RobustScaler
-    """
-    from sklearn.preprocessing import RobustScaler
     from sklearn.cluster import DBSCAN
     from sklearn.ensemble import IsolationForest
     from sklearn.neighbors import LocalOutlierFactor
@@ -742,7 +530,10 @@ def run_preprocessing_and_prediction(df_raw):
                                   average_precision_score, confusion_matrix)
     from pyod.models.ecod import ECOD
     try:
-        import shap
+        try:
+            import shap
+        except Exception:
+            shap = None
     except Exception:
         shap = None
 
@@ -1765,33 +1556,27 @@ def run_preprocessing_and_prediction(df_raw):
     #   alasan_utama    -> narasi bahasa Indonesia dari shap_top1_fitur
     #   alasan_kedua    -> narasi bahasa Indonesia dari shap_top2_fitur
 
-    if shap:
-        explainer    = shap.TreeExplainer(IF_MODEL)
-        shap_values  = explainer.shap_values(X_scaled)
-        expected_val = float(np.mean(explainer.expected_value))
+    explainer    = shap.TreeExplainer(IF_MODEL)
+    shap_values  = explainer.shap_values(X_scaled)
+    expected_val = float(np.mean(explainer.expected_value))
 
-        shap_abs = np.abs(shap_values)
-        top1_idx = shap_abs.argmax(axis=1)                     # fitur kontribusi terbesar
-        top2_idx = np.argsort(shap_abs, axis=1)[:, -2]        # fitur kontribusi kedua
+    shap_abs = np.abs(shap_values)
+    top1_idx = shap_abs.argmax(axis=1)                     # fitur kontribusi terbesar
+    top2_idx = np.argsort(shap_abs, axis=1)[:, -2]        # fitur kontribusi kedua
 
-        df["shap_top1_fitur"] = [feature_names[i] for i in top1_idx]
-        df["shap_top1_nilai"] = shap_values[np.arange(len(shap_values)), top1_idx].round(4)
-        df["shap_top2_fitur"] = [feature_names[i] for i in top2_idx]
-        df["shap_top2_nilai"] = shap_values[np.arange(len(shap_values)), top2_idx].round(4)
+    df["shap_top1_fitur"] = [feature_names[i] for i in top1_idx]
+    df["shap_top1_nilai"] = shap_values[np.arange(len(shap_values)), top1_idx].round(4)
+    df["shap_top2_fitur"] = [feature_names[i] for i in top2_idx]
+    df["shap_top2_nilai"] = shap_values[np.arange(len(shap_values)), top2_idx].round(4)
 
-        # Konversi nama fitur teknis -> narasi bahasa Indonesia
+    # Konversi nama fitur teknis -> narasi bahasa Indonesia
 
-        df["alasan_utama"]   = df["shap_top1_fitur"].apply(get_narasi)
-        df["alasan_kedua"]   = df["shap_top2_fitur"].apply(get_narasi)
+    df["alasan_utama"]   = df["shap_top1_fitur"].apply(get_narasi)
+    df["alasan_kedua"]   = df["shap_top2_fitur"].apply(get_narasi)
 
-        print(f"[TAHAP 20] SHAP selesai. Expected value IF: {expected_val:.4f}")
-        print(f"           Top fitur terbanyak: "
-              f"{pd.Series(df['shap_top1_fitur']).value_counts().head(3).to_dict()}")
-    else:
-        shap_values = np.zeros((len(df), len(feature_names)))
-        expected_val = 0.0
-        df["alasan_utama"] = "SHAP tidak tersedia"
-        df["alasan_kedua"] = "SHAP tidak tersedia"
+    print(f"[TAHAP 20] SHAP selesai. Expected value IF: {expected_val:.4f}")
+    print(f"           Top fitur terbanyak: "
+          f"{pd.Series(df['shap_top1_fitur']).value_counts().head(3).to_dict()}")
 
 
     # ╔══════════════════════════════════════════════════════════╗
@@ -3098,7 +2883,7 @@ def _load_grid_search_checkpoint():
         return None
     try:
         with open(GRID_SEARCH_CHECKPOINT_FILE, "rb") as f:
-            pickle.dump(payload, f)
+            return pickle.load(f)
     except Exception:
         return None
 
@@ -3566,6 +3351,228 @@ def api_tuning_gridsearch_checkpoint():
 
 @app.route("/api/tuning/gridsearch/latest")
 def api_tuning_gridsearch_latest():
+    """
+    Mengembalikan hasil grid search terakhir yang tersimpan (jika ada).
+    Digunakan saat halaman dibuka agar user bisa langsung melihat hasil sebelumnya.
+    """
+    if not os.path.exists(GRID_SEARCH_FILE):
+        return jsonify({"ok": False, "error": "Belum ada hasil grid search tersimpan."})
+    try:
+        with open(GRID_SEARCH_FILE, "rb") as f:
+            payload = pickle.load(f)
+        return jsonify({"ok": True, **payload})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)})
+
+
+@app.route("/api/tuning/baseline")
+def api_tuning_baseline():
+    """
+    Mengembalikan data baseline (model saat ini) untuk ditampilkan
+    di halaman tuning SEBELUM user melakukan tuning.
+    """
+    if not models_exist():
+        return jsonify({"ok": False, "error": "Belum ada data. Upload dan proses data terlebih dahulu."})
+
+    try:
+        (_, _, _, _, _, _, _, results, _, _, df) = load_models()
+
+        n_total = len(df)
+
+        # Jumlah anomali per algoritma
+        n_if   = int(df["if_pred"].sum())   if "if_pred"   in df.columns else 0
+        n_lof  = int(df["lof_pred"].sum())  if "lof_pred"  in df.columns else 0
+        n_ecod = int(df["ecod_pred"].sum()) if "ecod_pred" in df.columns else 0
+        n_ens  = int(df["anomali_final"].sum()) if "anomali_final" in df.columns else 0
+
+        # Vote distribution
+        vote_count = df["vote_count"] if "vote_count" in df.columns else (
+            df.get("if_pred", 0) + df.get("lof_pred", 0) + df.get("ecod_pred", 0)
+        )
+        vote_dist = {
+            "vote_3": int((vote_count == 3).sum()),
+            "vote_2": int((vote_count == 2).sum()),
+            "vote_1": int((vote_count == 1).sum()),
+            "vote_0": int((vote_count == 0).sum()),
+        }
+
+        # Agreement matrix
+        if all(c in df.columns for c in ["if_pred", "lof_pred", "ecod_pred"]):
+            if_pred   = df["if_pred"].values
+            lof_pred  = df["lof_pred"].values
+            ecod_pred = df["ecod_pred"].values
+            agree_if_lof   = int(((if_pred == 1) & (lof_pred == 1)).sum())
+            agree_if_ecod  = int(((if_pred == 1) & (ecod_pred == 1)).sum())
+            agree_lof_ecod = int(((lof_pred == 1) & (ecod_pred == 1)).sum())
+            agree_all      = int(((if_pred == 1) & (lof_pred == 1) & (ecod_pred == 1)).sum())
+        else:
+            agree_if_lof = agree_if_ecod = agree_lof_ecod = agree_all = 0
+
+        return jsonify({
+            "ok": True,
+            "n_total": n_total,
+            "results": {
+                "if":   {"n": n_if,   "pct": round(n_if/n_total*100, 2)},
+                "lof":  {"n": n_lof,  "pct": round(n_lof/n_total*100, 2)},
+                "ecod": {"n": n_ecod, "pct": round(n_ecod/n_total*100, 2)},
+                "ensemble": {"n": n_ens, "pct": round(n_ens/n_total*100, 2)},
+            },
+            "vote_dist": vote_dist,
+            "agreement": {
+                "if_lof":    {"n": agree_if_lof,   "pct": round(agree_if_lof/n_total*100, 2)},
+                "if_ecod":   {"n": agree_if_ecod,  "pct": round(agree_if_ecod/n_total*100, 2)},
+                "lof_ecod":  {"n": agree_lof_ecod, "pct": round(agree_lof_ecod/n_total*100, 2)},
+                "all_three": {"n": agree_all,      "pct": round(agree_all/n_total*100, 2)},
+            },
+            "metrics": results,
+        })
+
+    except Exception as e:
+        import traceback
+        return jsonify({"ok": False, "error": str(e), "detail": traceback.format_exc()})
+
+
+@app.route("/api/tuning", methods=["POST"])
+def api_tuning():
+    """
+    Jalankan ulang TAHAP 15-20 (IF, LOF, ECOD, Ensemble, SHAP)
+    dengan parameter custom dari user, dan SIMPAN hasilnya secara otomatis.
+    Mengembalikan metrik perbandingan dan ringkasan hasil.
+    """
+    if not models_exist():
+        return jsonify({"ok": False, "error": "Belum ada data. Upload dan proses data terlebih dahulu."})
+
+    try:
+        from sklearn.ensemble import IsolationForest
+        from sklearn.neighbors import LocalOutlierFactor
+        from pyod.models.ecod import ECOD
+
+        body = request.get_json(force=True) or {}
+
+        # --- Ambil parameter dari request ---
+        # Isolation Forest
+        if_n_estimators   = int(body.get("if_n_estimators", 200))
+        if_contamination  = float(body.get("if_contamination", 0.015))
+        if_max_samples    = body.get("if_max_samples", "auto")
+        if if_max_samples not in ("auto",):
+            if_max_samples = int(if_max_samples)
+
+        # LOF
+        lof_n_neighbors   = int(body.get("lof_n_neighbors", 70))
+        lof_contamination = float(body.get("lof_contamination", 0.005))
+        lof_metric        = body.get("lof_metric", "minkowski")
+
+        # ECOD
+        ecod_contamination = float(body.get("ecod_contamination", 0.005))
+
+        # Ensemble threshold
+        ensemble_min_votes = int(body.get("ensemble_min_votes", 2))
+
+        # Validasi batas wajar
+        if_n_estimators   = max(10,  min(if_n_estimators,  1000))
+        if_contamination  = max(0.001, min(if_contamination,  0.5))
+        lof_n_neighbors   = max(2,   min(lof_n_neighbors,   200))
+        lof_contamination = max(0.001, min(lof_contamination,  0.5))
+        ecod_contamination= max(0.001, min(ecod_contamination, 0.5))
+        ensemble_min_votes= max(1,   min(ensemble_min_votes,  3))
+
+        # --- Load X_scaled dari model yang sudah tersimpan ---
+        (_, _, _, _, _, _, _, _, _, _, df_orig) = load_models()
+        d = MODEL_DIR
+        x_scaled_path = f"{d}/X_scaled.npy"
+        if not os.path.exists(x_scaled_path):
+            return jsonify({"ok": False, "error": "X_scaled.npy tidak ditemukan. Silakan re-upload dan proses ulang data."})
+        X_scaled = np.load(x_scaled_path)
+
+        n_total = len(X_scaled)
+
+        # --- Isolation Forest ---
+        if_model = IsolationForest(
+            n_estimators=if_n_estimators,
+            contamination=if_contamination,
+            max_samples=if_max_samples,
+            random_state=42
+        )
+        if_model.fit(X_scaled)
+        if_pred  = (if_model.predict(X_scaled) == -1).astype(int)
+        if_score = -if_model.score_samples(X_scaled)
+        if_score = (if_score - if_score.min()) / (if_score.max() - if_score.min() + 1e-9)
+        n_if = int(if_pred.sum())
+
+        # --- LOF ---
+        lof_model = LocalOutlierFactor(
+            n_neighbors=lof_n_neighbors,
+            contamination=lof_contamination,
+            metric=lof_metric,
+            novelty=False
+        )
+        lof_pred  = (lof_model.fit_predict(X_scaled) == -1).astype(int)
+        lof_score = -lof_model.negative_outlier_factor_
+        lof_score = (lof_score - lof_score.min()) / (lof_score.max() - lof_score.min() + 1e-9)
+        n_lof = int(lof_pred.sum())
+
+        # --- ECOD ---
+        ecod_model = ECOD(contamination=ecod_contamination)
+        ecod_model.fit(X_scaled)
+        ecod_pred  = ecod_model.labels_
+        ecod_score = ecod_model.decision_scores_
+        ecod_score = (ecod_score - ecod_score.min()) / (ecod_score.max() - ecod_score.min() + 1e-9)
+        n_ecod = int(ecod_pred.sum())
+
+        # --- Ensemble ---
+        vote_count    = if_pred + lof_pred + ecod_pred
+        anomali_final = (vote_count >= ensemble_min_votes).astype(int)
+        n_final       = int(anomali_final.sum())
+        pct_final     = round(n_final / n_total * 100, 2)
+
+        # Perbandingan dengan hasil sebelumnya (dari df_hasil.pkl)
+        prev_if   = int(df_orig["if_pred"].sum())   if "if_pred"   in df_orig.columns else None
+        prev_lof  = int(df_orig["lof_pred"].sum())  if "lof_pred"  in df_orig.columns else None
+        prev_ecod = int(df_orig["ecod_pred"].sum()) if "ecod_pred" in df_orig.columns else None
+        prev_ens  = int(df_orig["anomali_final"].sum()) if "anomali_final" in df_orig.columns else None
+
+        # --- Update df_orig dengan hasil terbaru ---
+        df_orig["if_pred"] = if_pred
+        df_orig["if_score"] = if_score.round(4)
+        df_orig["lof_pred"] = lof_pred
+        df_orig["lof_score"] = lof_score.round(4)
+        df_orig["ecod_pred"] = ecod_pred
+        df_orig["ecod_score"] = ecod_score.round(4)
+        df_orig["vote_count"] = vote_count
+        df_orig["anomali_final"] = anomali_final
+        df_orig["ensemble_score"] = ((if_score + lof_score + ecod_score) / 3).round(4)
+
+        # --- Re-Evaluate Metrik ---
+        from sklearn.metrics import precision_score, recall_score, f1_score, average_precision_score, confusion_matrix
+        y_true = df_orig["label_pseudo"].values if "label_pseudo" in df_orig.columns else np.zeros(len(df_orig))
+        new_results = {}
+        eval_pairs = {
+            "IF"      : (if_pred,                    if_score),
+            "LOF"     : (lof_pred,                   lof_score),
+            "ECOD"    : (ecod_pred,                  ecod_score),
+            "Ensemble": (df_orig["anomali_final"].values,  df_orig["ensemble_score"].values),
+        }
+        for name, (pred, score) in eval_pairs.items():
+            cm           = confusion_matrix(y_true, pred, labels=[0, 1])
+            tn, fp, fn, tp = cm.ravel() if cm.size == 4 else (0, 0, 0, 0)
+            new_results[name] = {
+                "precision": round(float(precision_score(y_true, pred, zero_division=0)), 4),
+                "recall"   : round(float(recall_score(y_true,    pred, zero_division=0)), 4),
+                "f1"       : round(float(f1_score(y_true,        pred, zero_division=0)), 4),
+                "auc"      : round(float(average_precision_score(y_true, score)), 4),
+                "tp": int(tp), "fp": int(fp), "fn": int(fn), "tn": int(tn),
+            }
+
+        # --- Re-calculate SHAP ---
+        try:
+            import shap
+        except Exception:
+            shap = None
+        (_, _, _, _, _, _, feature_names, _, _, _, _) = load_models()
+        explainer    = shap.TreeExplainer(if_model)
+        shap_values  = explainer.shap_values(X_scaled)
+        expected_val = float(np.mean(explainer.expected_value))
+
         shap_abs = np.abs(shap_values)
         top1_idx = shap_abs.argmax(axis=1)
         top2_idx = np.argsort(shap_abs, axis=1)[:, -2]
